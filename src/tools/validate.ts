@@ -6,6 +6,8 @@
 import { z } from 'zod';
 import { validateCandid, checkDidcAvailable } from '../validators/candid.js';
 import { validateMotoko } from '../validators/motoko.js';
+import { validateRust } from '../validators/rust.js';
+import { validateDfxJson } from '../validators/dfx-json.js';
 import { logger } from '../utils/logger.js';
 
 // Input schema
@@ -78,34 +80,12 @@ export async function validate(input: ValidateInput) {
       }
 
       case 'rust': {
-        // TODO: Implement Rust validation
-        result = {
-          valid: true,
-          issues: [],
-          suggestions: ['Rust validation coming soon'],
-        };
+        result = await validateRust(code);
         break;
       }
 
       case 'dfx-json': {
-        // TODO: Implement dfx.json validation
-        try {
-          JSON.parse(code);
-          result = {
-            valid: true,
-            issues: [],
-          };
-        } catch (e: any) {
-          result = {
-            valid: false,
-            issues: [
-              {
-                severity: 'error',
-                message: `Invalid JSON: ${e.message}`,
-              },
-            ],
-          };
-        }
+        result = await validateDfxJson(code);
         break;
       }
 

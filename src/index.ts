@@ -14,6 +14,8 @@ import {
 import { validate, ValidateInputSchema } from './tools/validate.js';
 import { getDocs, GetDocsInputSchema } from './tools/get-docs.js';
 import { getExample, GetExampleInputSchema } from './tools/get-example.js';
+import { dfxGuide, DfxGuideInputSchema } from './tools/dfx-guide.js';
+import { template, TemplateInputSchema } from './tools/template.js';
 import { logger, LogLevel } from './utils/logger.js';
 
 // Set log level from environment
@@ -125,6 +127,68 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           },
         },
       },
+      {
+        name: 'icp/dfx-guide',
+        description:
+          'Generates dfx command templates with safety checks and explanations. Prevents dangerous operations and provides best practices.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            operation: {
+              type: 'string',
+              enum: ['deploy', 'canister-call', 'identity', 'cycles', 'build'],
+              description: 'Type of dfx operation',
+            },
+            network: {
+              type: 'string',
+              enum: ['local', 'ic', 'playground'],
+              description: 'Target network (default: local)',
+            },
+            canister: {
+              type: 'string',
+              description: 'Canister name',
+            },
+            method: {
+              type: 'string',
+              description: 'Method name for canister-call operation',
+            },
+            args: {
+              type: 'string',
+              description: 'Method arguments in Candid format',
+            },
+            identityName: {
+              type: 'string',
+              description: 'Identity name for identity operations',
+            },
+          },
+          required: ['operation'],
+        },
+      },
+      {
+        name: 'icp/template',
+        description:
+          'Generates boilerplate code for ICP projects. Creates Motoko/Rust canisters or full-stack projects with best practices.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            templateType: {
+              type: 'string',
+              enum: ['motoko-canister', 'rust-canister', 'full-project'],
+              description: 'Type of template',
+            },
+            name: {
+              type: 'string',
+              description: 'Project/canister name',
+            },
+            features: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'Optional features (stable-vars, upgrade-hooks, timer, state-management)',
+            },
+          },
+          required: ['templateType', 'name'],
+        },
+      },
     ],
   };
 });
@@ -150,6 +214,16 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case 'icp/get-example': {
         const validatedArgs = GetExampleInputSchema.parse(args);
         return await getExample(validatedArgs);
+      }
+
+      case 'icp/dfx-guide': {
+        const validatedArgs = DfxGuideInputSchema.parse(args);
+        return await dfxGuide(validatedArgs);
+      }
+
+      case 'icp/template': {
+        const validatedArgs = TemplateInputSchema.parse(args);
+        return await template(validatedArgs);
       }
 
       default:
@@ -189,6 +263,8 @@ async function main() {
   logger.info('  - icp/validate (Candid, Motoko, Rust, dfx.json validation)');
   logger.info('  - icp/get-docs (Fetch ICP documentation)');
   logger.info('  - icp/get-example (Fetch code examples)');
+  logger.info('  - icp/dfx-guide (Safe dfx command templates)');
+  logger.info('  - icp/template (Code scaffolding)');
 }
 
 main().catch((error) => {

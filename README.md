@@ -52,8 +52,8 @@ Validates ICP code with detailed error messages and suggestions.
 **Supported languages:**
 - Candid (via didc CLI)
 - Motoko (pattern-based validation)
-- Rust (coming soon)
-- dfx.json (JSON schema)
+- Rust (ic-cdk pattern checking)
+- dfx.json (schema + best practices)
 
 **Example:**
 ```typescript
@@ -110,6 +110,36 @@ Fetches code examples from dfinity/examples.
 ```
 
 **Returns:** Complete example with source code, dfx.json, and README
+
+### icp/dfx-guide
+
+Generates safe dfx command templates with explanations.
+
+**Example:**
+```typescript
+{
+  "operation": "deploy",
+  "network": "ic",
+  "canister": "backend"
+}
+```
+
+**Returns:** Command template with safety checks, prerequisites, and next steps
+
+### icp/template
+
+Generates boilerplate code for ICP projects.
+
+**Example:**
+```typescript
+{
+  "templateType": "motoko-canister",
+  "name": "my_canister",
+  "features": ["stable-vars", "upgrade-hooks"]
+}
+```
+
+**Returns:** Complete project files ready to deploy
 
 ## Usage Pattern
 
@@ -185,15 +215,17 @@ export LOG_LEVEL=info
 
 ## Roadmap
 
-**v0.2 (Week 2):**
-- Rust validation (ic-cdk patterns)
-- dfx command guide tool
-- Code templates tool
+**v0.2 - Complete! ✅**
+- ✅ Rust validation (ic-cdk patterns)
+- ✅ dfx.json validation
+- ✅ dfx command guide tool
+- ✅ Code templates tool
 
-**v0.3:**
+**v0.3 (Future):**
 - Motoko compiler integration (moc)
-- Security pattern detection
-- Upgrade safety checker
+- Enhanced security pattern detection
+- Canister upgrade safety checker
+- Integration tests
 
 ## License
 
