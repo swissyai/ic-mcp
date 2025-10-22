@@ -11,6 +11,7 @@ export interface ValidationIssue {
   line?: number;
   column?: number;
   message: string;
+  code?: string;
   suggestion?: string;
   docUrl?: string;
 }

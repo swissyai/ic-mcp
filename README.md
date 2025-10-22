@@ -15,11 +15,16 @@ Makes AI coding assistants (Claude Code, Cursor, Windsurf) expert at building In
 
 ### Prerequisites
 
+**Required:**
 ```bash
-# Required: didc for Candid validation
+# dfx (includes moc compiler for Motoko validation)
+sh -ci "$(curl -fsSL https://internetcomputer.org/install.sh)"
+
+# didc for Candid validation
 cargo install --git https://github.com/dfinity/candid.git didc
 
-# Verify installation
+# Verify installations
+dfx --version
 didc --version
 ```
 
@@ -50,10 +55,10 @@ Add to your MCP client configuration (e.g., Claude Code):
 Validates ICP code with detailed error messages and suggestions.
 
 **Supported languages:**
-- Candid (via didc CLI)
-- Motoko (pattern-based validation)
-- Rust (ic-cdk pattern checking)
-- dfx.json (schema + best practices)
+- **Candid** - Full validation via didc compiler
+- **Motoko** - Full type-checking via moc compiler (requires dfx)
+- **Rust** - ic-cdk pattern checking (imports, attributes, security patterns)
+- **dfx.json** - Schema validation and best practices
 
 **Example:**
 ```typescript
