@@ -17,6 +17,12 @@ import { getExample, GetExampleInputSchema } from './tools/get-example.js';
 import { dfxGuide, DfxGuideInputSchema } from './tools/dfx-guide.js';
 import { template, TemplateInputSchema } from './tools/template.js';
 import { executeAnalyzeProject, analyzeProjectSchema, analyzeProjectTool } from './tools/analyze-project.js';
+import { executeTestDeploy, testDeploySchema, testDeployTool } from './tools/test-deploy.js';
+import { executeTestCall, testCallSchema, testCallTool } from './tools/test-call.js';
+import { executeTestScenario, testScenarioSchema, testScenarioTool } from './tools/test-scenario.js';
+import { executeCheckUpgrade, checkUpgradeSchema, checkUpgradeTool } from './tools/check-upgrade.js';
+import { executeRefactor, refactorSchema, refactorTool } from './tools/refactor.js';
+import { executeSpeed, speedSchema, speedTool } from './tools/speed.js';
 import { logger, LogLevel } from './utils/logger.js';
 
 // Set log level from environment
@@ -29,7 +35,7 @@ logger.setLevel(LogLevel[logLevel.toUpperCase() as keyof typeof LogLevel] || Log
 const server = new Server(
   {
     name: 'icp-mcp',
-    version: '0.4.0',
+    version: '0.5.0',
   },
   {
     capabilities: {
@@ -191,6 +197,12 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         },
       },
       analyzeProjectTool,
+      testDeployTool,
+      testCallTool,
+      testScenarioTool,
+      checkUpgradeTool,
+      refactorTool,
+      speedTool,
     ],
   };
 });
@@ -241,6 +253,84 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
       }
 
+      case 'icp/test-deploy': {
+        const validatedArgs = testDeploySchema.parse(args);
+        const result = await executeTestDeploy(validatedArgs);
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: result,
+            },
+          ],
+        };
+      }
+
+      case 'icp/test-call': {
+        const validatedArgs = testCallSchema.parse(args);
+        const result = await executeTestCall(validatedArgs);
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: result,
+            },
+          ],
+        };
+      }
+
+      case 'icp/test-scenario': {
+        const validatedArgs = testScenarioSchema.parse(args);
+        const result = await executeTestScenario(validatedArgs);
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: result,
+            },
+          ],
+        };
+      }
+
+      case 'icp/check-upgrade': {
+        const validatedArgs = checkUpgradeSchema.parse(args);
+        const result = await executeCheckUpgrade(validatedArgs);
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: result,
+            },
+          ],
+        };
+      }
+
+      case 'icp/refactor': {
+        const validatedArgs = refactorSchema.parse(args);
+        const result = await executeRefactor(validatedArgs);
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: result,
+            },
+          ],
+        };
+      }
+
+      case 'icp/speed': {
+        const validatedArgs = speedSchema.parse(args);
+        const result = await executeSpeed(validatedArgs);
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: result,
+            },
+          ],
+        };
+      }
+
       default:
         throw new Error(`Unknown tool: ${name}`);
     }
@@ -274,13 +364,23 @@ async function main() {
   await server.connect(transport);
 
   logger.info('ICP-MCP Server started');
-  logger.info('Available tools:');
-  logger.info('  - icp/validate (Candid, Motoko, Rust, dfx.json validation)');
-  logger.info('  - icp/get-docs (Fetch ICP documentation)');
-  logger.info('  - icp/get-example (Fetch code examples)');
-  logger.info('  - icp/dfx-guide (Safe dfx command templates)');
-  logger.info('  - icp/template (Code scaffolding)');
-  logger.info('  - icp/analyze-project (Project structure analysis)');
+  logger.info('Available tools (12):');
+  logger.info('  Validation:');
+  logger.info('    - icp/validate (Code validation with security checks)');
+  logger.info('    - icp/analyze-project (Project analysis)');
+  logger.info('    - icp/check-upgrade (Upgrade safety)');
+  logger.info('  Testing:');
+  logger.info('    - icp/test-deploy (Deploy projects)');
+  logger.info('    - icp/test-call (Execute methods)');
+  logger.info('    - icp/test-scenario (Multi-step tests)');
+  logger.info('  Development:');
+  logger.info('    - icp/get-docs (Fetch documentation)');
+  logger.info('    - icp/get-example (Code examples)');
+  logger.info('    - icp/dfx-guide (Command templates)');
+  logger.info('    - icp/template (Code scaffolding)');
+  logger.info('  Optimization:');
+  logger.info('    - icp/refactor (Smart refactoring)');
+  logger.info('    - icp/speed (Performance analysis)');
 }
 
 main().catch((error) => {

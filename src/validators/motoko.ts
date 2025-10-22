@@ -4,6 +4,7 @@
 
 import type { ValidationResult } from '../types/index.js';
 import { compileMotokoCode } from './motoko-compiler.js';
+import { checkMotokoSecurity } from './security-patterns.js';
 import { logger } from '../utils/logger.js';
 import { validationCache } from '../utils/cache.js';
 
@@ -12,10 +13,12 @@ import { validationCache } from '../utils/cache.js';
  */
 export async function validateMotoko(
   code: string,
-  _context?: { isUpgrade?: boolean; hasStableState?: boolean }
+  context?: { isUpgrade?: boolean; hasStableState?: boolean; securityCheck?: boolean }
 ): Promise<ValidationResult> {
+  const securityCheck = context?.securityCheck ?? false;
+
   // Check cache
-  const cacheKey = `motoko:${code}`;
+  const cacheKey = `motoko:${code}:sec=${securityCheck}`;
   const cached = validationCache.get(cacheKey);
   if (cached) {
     logger.debug('Using cached Motoko validation result');
@@ -23,5 +26,14 @@ export async function validateMotoko(
   }
 
   logger.info('Validating Motoko code with moc compiler');
-  return await compileMotokoCode(code);
+  const result = await compileMotokoCode(code);
+
+  // Add security checks if requested
+  if (securityCheck) {
+    logger.debug('Running security pattern checks');
+    const securityIssues = checkMotokoSecurity(code);
+    result.issues = [...result.issues, ...securityIssues];
+  }
+
+  return result;
 }

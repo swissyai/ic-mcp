@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "dfx": "0.20.1",
+  "canisters": {
+    "canister_a": {
+      "type": "motoko",
+      "main": "src/canister_a/main.mo",
+      "dependencies": ["canister_b"]
+    },
+    "canister_b": {
+      "type": "motoko",
+      "main": "src/canister_b/main.mo",
+      "dependencies": ["canister_a"]
+    }
+  }
+}

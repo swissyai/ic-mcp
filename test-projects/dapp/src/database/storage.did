@@ -1,0 +1,5 @@
+service : {
+  add : (text) -> (nat);
+  get : (nat) -> (opt text) query;
+  count : () -> (nat) query;
+}

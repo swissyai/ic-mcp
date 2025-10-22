@@ -21,6 +21,7 @@ export const ValidateInputSchema = z.object({
     .object({
       isUpgrade: z.boolean().optional(),
       hasStableState: z.boolean().optional(),
+      securityCheck: z.boolean().optional().describe('Enable enhanced security checks'),
     })
     .optional()
     .describe('Optional validation context'),
@@ -80,7 +81,7 @@ export async function validate(input: ValidateInput) {
       }
 
       case 'rust': {
-        result = await validateRust(code);
+        result = await validateRust(code, context);
         break;
       }
 

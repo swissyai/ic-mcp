@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "dfx": "0.20.1",
+  "canisters": {
+    "counter": {
+      "type": "motoko",
+      "main": "src/counter/main.mo"
+    }
+  }
+}

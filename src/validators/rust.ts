@@ -209,9 +209,14 @@ function checkAntipatterns(code: string): ValidationIssue[] {
 /**
  * Validate Rust ic-cdk code
  */
-export async function validateRust(code: string): Promise<ValidationResult> {
+export async function validateRust(
+  code: string,
+  context?: { securityCheck?: boolean }
+): Promise<ValidationResult> {
+  const enhancedSecurity = context?.securityCheck ?? false;
+
   // Check cache
-  const cacheKey = `rust:${code}`;
+  const cacheKey = `rust:${code}:sec=${enhancedSecurity}`;
   const cached = validationCache.get(cacheKey);
   if (cached) {
     logger.debug('Using cached Rust validation result');
@@ -228,6 +233,13 @@ export async function validateRust(code: string): Promise<ValidationResult> {
       ...checkSecurityPatterns(code),
       ...checkAntipatterns(code),
     ];
+
+    // Add enhanced security checks if requested
+    if (enhancedSecurity) {
+      const { checkRustSecurity } = await import('./security-patterns.js');
+      logger.debug('Running enhanced security checks');
+      issues.push(...checkRustSecurity(code));
+    }
 
     // Check if there are any errors
     const hasErrors = issues.some(issue => issue.severity === 'error');
