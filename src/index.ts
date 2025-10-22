@@ -16,6 +16,7 @@ import { getDocs, GetDocsInputSchema } from './tools/get-docs.js';
 import { getExample, GetExampleInputSchema } from './tools/get-example.js';
 import { dfxGuide, DfxGuideInputSchema } from './tools/dfx-guide.js';
 import { template, TemplateInputSchema } from './tools/template.js';
+import { executeAnalyzeProject, analyzeProjectSchema, analyzeProjectTool } from './tools/analyze-project.js';
 import { logger, LogLevel } from './utils/logger.js';
 
 // Set log level from environment
@@ -28,7 +29,7 @@ logger.setLevel(LogLevel[logLevel.toUpperCase() as keyof typeof LogLevel] || Log
 const server = new Server(
   {
     name: 'icp-mcp',
-    version: '0.3.0',
+    version: '0.4.0',
   },
   {
     capabilities: {
@@ -189,6 +190,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           required: ['templateType', 'name'],
         },
       },
+      analyzeProjectTool,
     ],
   };
 });
@@ -224,6 +226,19 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case 'icp/template': {
         const validatedArgs = TemplateInputSchema.parse(args);
         return await template(validatedArgs);
+      }
+
+      case 'icp/analyze-project': {
+        const validatedArgs = analyzeProjectSchema.parse(args);
+        const result = await executeAnalyzeProject(validatedArgs);
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: result,
+            },
+          ],
+        };
       }
 
       default:
@@ -265,6 +280,7 @@ async function main() {
   logger.info('  - icp/get-example (Fetch code examples)');
   logger.info('  - icp/dfx-guide (Safe dfx command templates)');
   logger.info('  - icp/template (Code scaffolding)');
+  logger.info('  - icp/analyze-project (Project structure analysis)');
 }
 
 main().catch((error) => {

@@ -57,6 +57,8 @@ Validates ICP code with detailed error messages and suggestions.
 **Supported languages:**
 - **Candid** - Full validation via didc compiler
 - **Motoko** - Full type-checking via moc compiler (requires dfx)
+  - Supports multi-canister projects with `canister:` imports
+  - Validates cross-canister dependencies automatically
 - **Rust** - ic-cdk pattern checking (imports, attributes, security patterns)
 - **dfx.json** - Schema validation and best practices
 
@@ -146,6 +148,33 @@ Generates boilerplate code for ICP projects.
 
 **Returns:** Complete project files ready to deploy
 
+### icp/analyze-project
+
+Analyzes entire ICP project structure, dependencies, and optionally validates all canisters.
+
+**Example:**
+```typescript
+{
+  "projectPath": "/path/to/project",  // Optional, defaults to current directory
+  "validate": true,                    // Optional, validate all canisters
+  "checkDependencies": true            // Optional, analyze dependencies
+}
+```
+
+**Returns:**
+- All canisters with configurations
+- Source file locations and line counts
+- Dependency graph and build order
+- Circular dependency detection
+- Optional validation of all canister code
+- Project-level issues and warnings
+
+**Use cases:**
+- Understand multi-canister project architecture
+- Detect dependency issues before deployment
+- Validate entire project at once
+- Get project overview and statistics
+
 ## Usage Pattern
 
 The typical workflow for building ICP dapps:
@@ -220,17 +249,29 @@ export LOG_LEVEL=info
 
 ## Roadmap
 
+**v0.4 - Complete! ✅** (Current)
+- ✅ Project-level analysis tool
+- ✅ Dependency graph analysis
+- ✅ Multi-canister validation support
+- ✅ Circular dependency detection
+- ✅ Topological build order calculation
+
+**v0.3 - Complete! ✅**
+- ✅ Motoko compiler integration (moc)
+- ✅ Full type-checking with error codes
+- ✅ Import validation via dfx cache
+
 **v0.2 - Complete! ✅**
 - ✅ Rust validation (ic-cdk patterns)
 - ✅ dfx.json validation
 - ✅ dfx command guide tool
 - ✅ Code templates tool
 
-**v0.3 (Future):**
-- Motoko compiler integration (moc)
+**Future:**
 - Enhanced security pattern detection
 - Canister upgrade safety checker
 - Integration tests
+- Performance metrics
 
 ## License
 
