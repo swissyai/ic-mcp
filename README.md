@@ -150,7 +150,7 @@ Generates boilerplate code for ICP projects.
 
 ### icp/analyze-project
 
-Analyzes entire ICP project structure, dependencies, and optionally validates all canisters.
+Analyzes complete ICP project structure from dfx.json, including all canisters, dependencies, and build order.
 
 **Example:**
 ```typescript
@@ -164,36 +164,156 @@ Analyzes entire ICP project structure, dependencies, and optionally validates al
 **Returns:**
 - All canisters with configurations
 - Source file locations and line counts
-- Dependency graph and build order
+- Dependency graph (explicit + implicit)
 - Circular dependency detection
-- Optional validation of all canister code
+- Topological build order
+- Optional validation results
 - Project-level issues and warnings
 
-**Use cases:**
-- Understand multi-canister project architecture
-- Detect dependency issues before deployment
-- Validate entire project at once
-- Get project overview and statistics
+### icp/test-deploy
+
+Builds and deploys canisters to local replica or IC playground for testing.
+
+**Example:**
+```typescript
+{
+  "projectPath": ".",
+  "network": "local",                  // local, playground
+  "canisters": ["backend"],            // Optional, defaults to all
+  "mode": "reinstall",                 // install, reinstall, upgrade
+  "clean": true
+}
+```
+
+**Returns:**
+- Deployed canister IDs
+- Network information
+- Build/deployment times
+- Success/failure status
+
+### icp/test-call
+
+Executes canister methods with automatic Candid encoding/decoding.
+
+**Example:**
+```typescript
+{
+  "canisterId": "ryjl3-tyaaa-aaaaa-aaaba-cai",
+  "method": "transfer",
+  "args": [{"to": "address", "amount": 1000}],
+  "network": "local",                  // local, ic, playground
+  "callType": "update"                 // query, update
+}
+```
+
+**Returns:**
+- Method result (decoded)
+- Execution time
+- Success/error status
+
+### icp/test-scenario
+
+Orchestrates multi-step test scenarios with state validation.
+
+**Example:**
+```typescript
+{
+  "projectPath": ".",
+  "network": "local",
+  "steps": [
+    {
+      "name": "Register user",
+      "canisterId": "backend",
+      "method": "register",
+      "args": [{"username": "alice"}],
+      "saveResult": "userId"
+    },
+    {
+      "name": "Check balance",
+      "canisterId": "ledger",
+      "method": "balance",
+      "args": ["{{userId}}"],          // Use saved result
+      "expect": {"result": 0}
+    }
+  ],
+  "continueOnFailure": false
+}
+```
+
+**Returns:**
+- Per-step results
+- Pass/fail status
+- Actual vs expected values
+- Total execution time
+
+### icp/check-upgrade
+
+Validates canister upgrade safety by comparing Candid interfaces.
+
+**Example:**
+```typescript
+{
+  "oldCandid": "service : { balance : (principal) -> (nat) query }",
+  "newCandid": "service : { balance : (principal) -> (nat64) query }"
+}
+```
+
+**Returns:**
+- Compatibility status
+- Breaking changes detected
+- Method signature changes
+- Upgrade recommendations
+
+### icp/refactor
+
+Applies ICP-specific code transformations and refactorings.
+
+**Example:**
+```typescript
+{
+  "code": "actor { var counter = 0; }",
+  "language": "motoko",
+  "refactoring": "add-stable-vars"     // add-upgrade-hooks, add-stable-vars,
+                                       // add-caller-checks, modernize
+}
+```
+
+**Returns:**
+- Refactored code
+- Change summary
+- Modified locations
+
+### icp/speed
+
+Analyzes canister performance for optimization opportunities.
+
+**Example:**
+```typescript
+{
+  "code": "actor { public func process() { ... } }",
+  "language": "motoko",
+  "focus": "full"                      // full, memory, cycles, latency
+}
+```
+
+**Returns:**
+- Performance score (0-100)
+- Detected issues with severity
+- Estimated impact
+- Optimization suggestions
+- Issue locations
 
 ## Usage Pattern
 
-The typical workflow for building ICP dapps:
-
+**Development workflow:**
 ```
-1. AI queries relevant docs
-   → icp/get-docs
-
-2. AI reviews working examples
-   → icp/get-example
-
-3. AI generates code
-
-4. AI validates iteratively
-   → icp/validate (Candid)
-   → icp/validate (Motoko)
-   ↻ Fix issues, validate again
-
-5. User reviews and deploys
+1. Learn → icp/get-docs, icp/get-example
+2. Generate → icp/template
+3. Validate → icp/validate (iteratively)
+4. Analyze → icp/analyze-project
+5. Test → icp/test-deploy → icp/test-call → icp/test-scenario
+6. Optimize → icp/speed, icp/refactor
+7. Upgrade → icp/check-upgrade
 ```
 
 ## Development
@@ -221,13 +341,31 @@ npm run clean
 ```
 src/
 ├── index.ts              # MCP server
-├── tools/                # MCP tool implementations
+├── tools/                # 12 MCP tool implementations
 │   ├── validate.ts       # Code validation
 │   ├── get-docs.ts       # Documentation fetcher
-│   └── get-example.ts    # Examples fetcher
+│   ├── get-example.ts    # Examples fetcher
+│   ├── dfx-guide.ts      # Command templates
+│   ├── template.ts       # Code scaffolding
+│   ├── analyze-project.ts # Project analysis
+│   ├── test-deploy.ts    # Deployment testing
+│   ├── test-call.ts      # Method execution
+│   ├── test-scenario.ts  # Multi-step tests
+│   ├── check-upgrade.ts  # Upgrade safety
+│   ├── refactor.ts       # Code transformations
+│   └── speed.ts          # Performance analysis
 ├── validators/           # Language validators
 │   ├── candid.ts         # didc integration
-│   └── motoko.ts         # Pattern matching
+│   ├── motoko-compiler.ts # moc integration
+│   ├── rust.ts           # ic-cdk patterns
+│   ├── dfx-json.ts       # Config validation
+│   ├── upgrade-checker.ts # Candid compatibility
+│   └── security-patterns.ts # Security detection
+├── analyzers/            # Project analysis
+│   ├── project.ts        # Project structure
+│   └── dependencies.ts   # Dependency graphs
+├── executors/            # External tools
+│   └── dfx-executor.ts   # dfx CLI wrapper
 ├── fetchers/             # Content fetchers
 │   └── github.ts         # GitHub API client
 └── utils/                # Utilities
@@ -249,29 +387,37 @@ export LOG_LEVEL=info
 
 ## Roadmap
 
-**v0.4 - Complete! ✅** (Current)
-- ✅ Project-level analysis tool
-- ✅ Dependency graph analysis
-- ✅ Multi-canister validation support
-- ✅ Circular dependency detection
-- ✅ Topological build order calculation
+**v0.5.0 - Complete! ✅** (Current)
+- ✅ Testing suite (deploy, call, scenario)
+- ✅ Upgrade safety checker
+- ✅ Security pattern detection
+- ✅ Smart refactoring tools
+- ✅ Performance analysis
+- ✅ 12 total tools available
 
-**v0.3 - Complete! ✅**
+**v0.4.0 - Complete! ✅**
+- ✅ Project-level analysis
+- ✅ Dependency graph analysis
+- ✅ Multi-canister validation
+- ✅ Circular dependency detection
+- ✅ Topological build order
+
+**v0.3.0 - Complete! ✅**
 - ✅ Motoko compiler integration (moc)
 - ✅ Full type-checking with error codes
 - ✅ Import validation via dfx cache
 
-**v0.2 - Complete! ✅**
+**v0.2.0 - Complete! ✅**
 - ✅ Rust validation (ic-cdk patterns)
 - ✅ dfx.json validation
-- ✅ dfx command guide tool
-- ✅ Code templates tool
+- ✅ dfx command guide
+- ✅ Code templates
 
 **Future:**
-- Enhanced security pattern detection
-- Canister upgrade safety checker
-- Integration tests
-- Performance metrics
+- Integration test suite
+- Auto-fix suggestions (ESLint-like)
+- Performance optimizations (parallel validation)
+- HTTPS outcalls validation
 
 ## License
 
