@@ -53,7 +53,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       {
         name: 'icp/validate',
         description:
-          'Validates ICP code (Candid, Motoko, Rust, dfx.json). Provides detailed error messages and suggestions for improvements.',
+          'Validates ICP canister code with comprehensive error checking and security analysis. Supports Candid (via didc compiler), Motoko (via moc compiler with full type-checking), Rust (ic-cdk pattern validation), and dfx.json configuration files. Returns detailed error messages with line/column numbers, error codes, and actionable suggestions for fixes. Use this for iterative development to catch type errors, security vulnerabilities, and configuration issues before deployment.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -64,25 +64,21 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             language: {
               type: 'string',
               enum: ['candid', 'motoko', 'rust', 'dfx-json'],
-              description: 'Programming language',
+              description: 'Programming language or configuration type',
             },
             filename: {
               type: 'string',
-              description: 'Optional filename for context',
+              description: 'Optional filename for better error context',
             },
             context: {
               type: 'object',
               properties: {
-                isUpgrade: {
+                securityCheck: {
                   type: 'boolean',
-                  description: 'Whether this is an upgrade context',
-                },
-                hasStableState: {
-                  type: 'boolean',
-                  description: 'Whether the canister has stable state',
+                  description: 'Enable enhanced security pattern detection (caller validation, trap safety, overflow checks)',
                 },
               },
-              description: 'Optional validation context',
+              description: 'Optional validation settings',
             },
           },
           required: ['code', 'language'],
@@ -91,7 +87,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       {
         name: 'icp/get-docs',
         description:
-          'Fetches ICP documentation from the official dfinity/portal repository. Returns current, accurate documentation in markdown format.',
+          'Fetches official Internet Computer documentation from the dfinity/portal GitHub repository. Provides up-to-date documentation in markdown format with 15-minute caching for performance. Can browse directories to discover available docs or fetch specific documentation files by path. Returns current, accurate documentation directly from the source. Use this to access authoritative IC documentation for building dapps, understanding protocols, or learning best practices.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -106,7 +102,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             },
             maxLength: {
               type: 'number',
-              description: 'Maximum total content length to return',
+              description: 'Maximum total content length to return (optional limit)',
             },
           },
         },
@@ -114,22 +110,22 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       {
         name: 'icp/get-example',
         description:
-          'Fetches real code examples from dfinity/examples repository. Includes source code, dfx.json, and README.',
+          'Fetches working code examples from the official dfinity/examples repository. Returns complete, production-ready example projects including source code, dfx.json configuration, and README documentation. Can list all available examples for a language or fetch a specific example by name. Examples are maintained by the DFINITY Foundation and demonstrate best practices. Use this to learn implementation patterns, bootstrap new projects, or reference canonical solutions.',
         inputSchema: {
           type: 'object',
           properties: {
             language: {
               type: 'string',
               enum: ['motoko', 'rust', 'svelte'],
-              description: 'Programming language',
+              description: 'Programming language for examples',
             },
             exampleName: {
               type: 'string',
-              description: 'Name of the example (e.g., "hello_world")',
+              description: 'Name of the specific example to fetch (e.g., "hello_world", "counter")',
             },
             list: {
               type: 'boolean',
-              description: 'Set to true to list all available examples for a language',
+              description: 'Set to true to list all available examples for the specified language',
             },
           },
         },
@@ -137,23 +133,23 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       {
         name: 'icp/dfx-guide',
         description:
-          'Generates dfx command templates with safety checks and explanations. Prevents dangerous operations and provides best practices.',
+          'Generates safe dfx command-line templates with network-specific safety checks and detailed explanations. Provides ready-to-run commands for common operations including deployment, canister calls, identity management, cycles operations, and builds. Includes prerequisites, warnings about destructive actions (especially on mainnet), and step-by-step guidance. Prevents dangerous operations like force deployments or unintended mainnet transactions. Use this when users need to execute dfx commands but want safety guardrails and best practices.',
         inputSchema: {
           type: 'object',
           properties: {
             operation: {
               type: 'string',
               enum: ['deploy', 'canister-call', 'identity', 'cycles', 'build'],
-              description: 'Type of dfx operation',
+              description: 'Type of dfx operation to generate template for',
             },
             network: {
               type: 'string',
               enum: ['local', 'ic', 'playground'],
-              description: 'Target network (default: local)',
+              description: 'Target network (default: local). Mainnet operations include extra safety warnings.',
             },
             canister: {
               type: 'string',
-              description: 'Canister name',
+              description: 'Canister name for deploy/call operations',
             },
             method: {
               type: 'string',
@@ -161,11 +157,11 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             },
             args: {
               type: 'string',
-              description: 'Method arguments in Candid format',
+              description: 'Method arguments in Candid format (e.g., "(42, \\"text\\")")',
             },
             identityName: {
               type: 'string',
-              description: 'Identity name for identity operations',
+              description: 'Identity name for identity management operations',
             },
           },
           required: ['operation'],
@@ -174,23 +170,23 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       {
         name: 'icp/template',
         description:
-          'Generates boilerplate code for ICP projects. Creates Motoko/Rust canisters or full-stack projects with best practices.',
+          'Generates production-ready boilerplate code for ICP projects following DFINITY best practices. Creates individual Motoko or Rust canisters with proper structure, or complete full-stack projects with frontend integration. Supports optional features including stable storage variables, pre/post upgrade hooks, periodic timers, and state management patterns. Generated code includes proper imports, type definitions, and security patterns. Returns complete file contents ready to write to disk. Use this to bootstrap new projects or add properly-structured canisters to existing projects.',
         inputSchema: {
           type: 'object',
           properties: {
             templateType: {
               type: 'string',
               enum: ['motoko-canister', 'rust-canister', 'full-project'],
-              description: 'Type of template',
+              description: 'Type of template to generate',
             },
             name: {
               type: 'string',
-              description: 'Project/canister name',
+              description: 'Project or canister name (will be used for file names and module names)',
             },
             features: {
               type: 'array',
               items: { type: 'string' },
-              description: 'Optional features (stable-vars, upgrade-hooks, timer, state-management)',
+              description: 'Optional features to include: stable-vars, upgrade-hooks, timer, state-management',
             },
           },
           required: ['templateType', 'name'],

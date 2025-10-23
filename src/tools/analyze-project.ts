@@ -29,21 +29,7 @@ export type AnalyzeProjectInput = z.infer<typeof analyzeProjectSchema>;
  */
 export const analyzeProjectTool: Tool = {
   name: 'icp/analyze-project',
-  description: `Analyze entire ICP project structure.
-
-Returns:
-- All canisters with their configurations
-- Source file locations and line counts
-- Dependency graph and build order
-- Circular dependency detection
-- Optional validation of all canister code
-- Project-level issues and warnings
-
-Use this to:
-- Understand multi-canister project architecture
-- Detect dependency issues before deployment
-- Validate entire project at once
-- Get project overview and statistics`,
+  description: 'Analyzes complete ICP project structure from dfx.json, including all canisters, their configurations, source files, and line counts. Builds dependency graphs showing both explicit (dfx.json) and implicit (import statement) dependencies, detects circular dependencies, and calculates valid topological build order. Optionally validates all canister code using appropriate validators (moc for Motoko, ic-cdk patterns for Rust). Returns comprehensive project overview with warnings about configuration issues. Use this to understand multi-canister architecture, plan deployment order, or validate entire projects before deployment.',
   inputSchema: {
     type: 'object',
     properties: {

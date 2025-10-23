@@ -23,7 +23,7 @@ export type SpeedInput = z.infer<typeof speedSchema>;
  */
 export const speedTool: Tool = {
   name: 'icp/speed',
-  description: 'Analyze canister performance: memory usage, cycle costs, latency bottlenecks.',
+  description: 'Analyzes canister code for performance issues including excessive memory usage, high cycle costs, and latency bottlenecks. Detects inefficient patterns like unbounded heap growth, expensive operations in query calls, unoptimized data structures, and redundant computations. Calculates performance score (0-100) with severity-ranked issues, estimated impact, and specific optimization suggestions. Supports focused analysis on memory, cycles, or latency, or comprehensive full analysis. Returns actionable recommendations with code locations. Use this to optimize canister performance before deployment, reduce cycle costs, or diagnose production performance issues.',
   inputSchema: {
     type: 'object',
     properties: {

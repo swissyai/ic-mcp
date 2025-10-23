@@ -25,7 +25,7 @@ export type RefactorInput = z.infer<typeof refactorSchema>;
  */
 export const refactorTool: Tool = {
   name: 'icp/refactor',
-  description: 'Apply ICP-specific refactorings: upgrade hooks, stable storage, security patterns.',
+  description: 'Applies ICP-specific code transformations and refactorings to Motoko or Rust canisters. Automatically adds upgrade hooks (pre_upgrade/post_upgrade), converts variables to stable storage, inserts caller authentication checks, or modernizes syntax to current best practices. Performs safe code transformations with change tracking, showing exactly what was modified. Returns refactored code with detailed change summary. Use this to add upgrade safety to existing canisters, migrate to stable storage patterns, enhance security, or modernize legacy code to current DFINITY standards.',
   inputSchema: {
     type: 'object',
     properties: {
