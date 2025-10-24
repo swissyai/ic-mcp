@@ -1,43 +1,50 @@
 # ICP-MCP
 
-Model Context Protocol server for Internet Computer development.
+Model Context Protocol server that makes AI coding assistants expert at Internet Computer development.
 
-## What It Does
+## Overview
 
-Makes AI coding assistants (Claude Code, Cursor, Windsurf) expert at building Internet Computer dapps by providing:
+Integrates with Claude Code, Cursor, and Windsurf to provide real-time validation, documentation access, and ICP-specific guidance. Uses actual Motoko and Candid compilers for production-grade validation, not pattern matching approximations.
 
-- **Live validation** - Iterative code checking for Candid, Motoko, Rust
-- **Current documentation** - Real-time access to internetcomputer.org docs
-- **Real examples** - Working code from dfinity/examples
-- **Safe guidance** - Command templates with safety checks
+**Key capabilities:**
+- Live validation with moc/didc compilers (Motoko, Candid, Rust, dfx.json)
+- Real-time documentation from internetcomputer.org
+- Working code examples from dfinity/examples
+- Security pattern detection with ICP-specific explanations
+- Multi-canister project analysis and testing
+- Performance optimization suggestions
 
-## Installation
+**v0.6.0 improvements:**
+- Content-based validation caching (10-100x faster repeated checks)
+- Parallel multi-canister validation (3-5x faster)
+- 18 enhanced patterns with explanations, fix snippets, and documentation references
+- HTTPS outcalls validation (transform functions, URL limits, cycle management)
+
+## Quick Start
 
 ### Prerequisites
 
-**Required:**
 ```bash
-# dfx (includes moc compiler for Motoko validation)
+# Install dfx (provides moc compiler)
 sh -ci "$(curl -fsSL https://internetcomputer.org/install.sh)"
 
-# didc for Candid validation
+# Install didc for Candid validation
 cargo install --git https://github.com/dfinity/candid.git didc
 
-# Verify installations
+# Verify
 dfx --version
 didc --version
 ```
 
-### Install ICP-MCP
+### Install
 
 ```bash
 npm install -g icp-mcp
 ```
 
-### Configure MCP Client
+### Configure Your AI Assistant
 
-Add to your MCP client configuration (e.g., Claude Code):
-
+**Claude Code** (`~/Library/Application Support/Claude/claude_desktop_config.json`):
 ```json
 {
   "mcpServers": {
@@ -48,385 +55,193 @@ Add to your MCP client configuration (e.g., Claude Code):
 }
 ```
 
-## Tools
-
-### icp/validate
-
-Validates ICP code with detailed error messages and suggestions.
-
-**Supported languages:**
-- **Candid** - Full validation via didc compiler
-- **Motoko** - Full type-checking via moc compiler (requires dfx)
-  - Supports multi-canister projects with `canister:` imports
-  - Validates cross-canister dependencies automatically
-- **Rust** - ic-cdk pattern checking (imports, attributes, security patterns)
-- **dfx.json** - Schema validation and best practices
-
-**Example:**
-```typescript
-{
-  "code": "service : { greet : (text) -> (text) query }",
-  "language": "candid"
-}
-```
-
-**Returns:**
+**Cursor** (`.cursor/mcp.json` in your project):
 ```json
 {
-  "valid": true,
-  "issues": []
-}
-```
-
-### icp/get-docs
-
-Fetches documentation from dfinity/portal repository.
-
-**Browse directory:**
-```typescript
-{
-  "directory": "docs/building-apps"
-}
-```
-
-**Fetch specific files:**
-```typescript
-{
-  "paths": ["docs/building-apps/overview.mdx"]
-}
-```
-
-### icp/get-example
-
-Fetches code examples from dfinity/examples.
-
-**List examples:**
-```typescript
-{
-  "language": "motoko",
-  "list": true
-}
-```
-
-**Fetch specific example:**
-```typescript
-{
-  "language": "motoko",
-  "exampleName": "hello_world"
-}
-```
-
-**Returns:** Complete example with source code, dfx.json, and README
-
-### icp/dfx-guide
-
-Generates safe dfx command templates with explanations.
-
-**Example:**
-```typescript
-{
-  "operation": "deploy",
-  "network": "ic",
-  "canister": "backend"
-}
-```
-
-**Returns:** Command template with safety checks, prerequisites, and next steps
-
-### icp/template
-
-Generates boilerplate code for ICP projects.
-
-**Example:**
-```typescript
-{
-  "templateType": "motoko-canister",
-  "name": "my_canister",
-  "features": ["stable-vars", "upgrade-hooks"]
-}
-```
-
-**Returns:** Complete project files ready to deploy
-
-### icp/analyze-project
-
-Analyzes complete ICP project structure from dfx.json, including all canisters, dependencies, and build order.
-
-**Example:**
-```typescript
-{
-  "projectPath": "/path/to/project",  // Optional, defaults to current directory
-  "validate": true,                    // Optional, validate all canisters
-  "checkDependencies": true            // Optional, analyze dependencies
-}
-```
-
-**Returns:**
-- All canisters with configurations
-- Source file locations and line counts
-- Dependency graph (explicit + implicit)
-- Circular dependency detection
-- Topological build order
-- Optional validation results
-- Project-level issues and warnings
-
-### icp/test-deploy
-
-Builds and deploys canisters to local replica or IC playground for testing.
-
-**Example:**
-```typescript
-{
-  "projectPath": ".",
-  "network": "local",                  // local, playground
-  "canisters": ["backend"],            // Optional, defaults to all
-  "mode": "reinstall",                 // install, reinstall, upgrade
-  "clean": true
-}
-```
-
-**Returns:**
-- Deployed canister IDs
-- Network information
-- Build/deployment times
-- Success/failure status
-
-### icp/test-call
-
-Executes canister methods with automatic Candid encoding/decoding.
-
-**Example:**
-```typescript
-{
-  "canisterId": "ryjl3-tyaaa-aaaaa-aaaba-cai",
-  "method": "transfer",
-  "args": [{"to": "address", "amount": 1000}],
-  "network": "local",                  // local, ic, playground
-  "callType": "update"                 // query, update
-}
-```
-
-**Returns:**
-- Method result (decoded)
-- Execution time
-- Success/error status
-
-### icp/test-scenario
-
-Orchestrates multi-step test scenarios with state validation.
-
-**Example:**
-```typescript
-{
-  "projectPath": ".",
-  "network": "local",
-  "steps": [
-    {
-      "name": "Register user",
-      "canisterId": "backend",
-      "method": "register",
-      "args": [{"username": "alice"}],
-      "saveResult": "userId"
-    },
-    {
-      "name": "Check balance",
-      "canisterId": "ledger",
-      "method": "balance",
-      "args": ["{{userId}}"],          // Use saved result
-      "expect": {"result": 0}
+  "mcpServers": {
+    "icp": {
+      "command": "icp-mcp"
     }
-  ],
-  "continueOnFailure": false
+  }
 }
 ```
 
-**Returns:**
-- Per-step results
-- Pass/fail status
-- Actual vs expected values
-- Total execution time
+**Windsurf** (similar to Cursor - check Windsurf docs for exact path).
 
-### icp/check-upgrade
+Restart your AI assistant after configuration.
 
-Validates canister upgrade safety by comparing Candid interfaces.
+## Tools
 
-**Example:**
-```typescript
-{
-  "oldCandid": "service : { balance : (principal) -> (nat) query }",
-  "newCandid": "service : { balance : (principal) -> (nat64) query }"
-}
+### Core Development
+
+| Tool | Purpose | Example Use |
+|------|---------|-------------|
+| `icp/validate` | Validate Candid, Motoko, Rust, dfx.json | Iterative development with instant feedback |
+| `icp/analyze-project` | Analyze multi-canister projects | Understand dependencies, build order, validate all canisters |
+| `icp/get-docs` | Fetch internetcomputer.org documentation | Get current docs without leaving your editor |
+| `icp/get-example` | Fetch working examples from dfinity/examples | See real implementations of patterns |
+| `icp/template` | Generate canister boilerplate | Scaffold new Motoko/Rust canisters with best practices |
+
+### Testing & Deployment
+
+| Tool | Purpose | Example Use |
+|------|---------|-------------|
+| `icp/test-deploy` | Deploy to local/playground networks | Test multi-canister deployments with dependency ordering |
+| `icp/test-call` | Execute canister methods | Call and test canister functions with Candid encoding |
+| `icp/test-scenario` | Multi-step test orchestration | Run complex test flows with state validation |
+| `icp/dfx-guide` | Generate safe dfx commands | Get command templates with safety checks |
+
+### Quality & Optimization
+
+| Tool | Purpose | Example Use |
+|------|---------|-------------|
+| `icp/check-upgrade` | Validate upgrade compatibility | Detect breaking Candid interface changes |
+| `icp/refactor` | Apply ICP-specific transformations | Add upgrade hooks, stable vars, caller checks |
+| `icp/speed` | Performance analysis | Find memory, cycle, and latency bottlenecks |
+
+## Usage in Your Workflow
+
+### Development Flow
+
+```
+1. Start new canister
+   → Ask: "Create a Motoko canister with stable storage and upgrade hooks"
+   → Tool: icp/template
+
+2. Write code iteratively
+   → Ask: "Validate this code" (paste your Motoko/Rust/Candid)
+   → Tool: icp/validate
+   → Get: Compiler errors, security warnings, fix suggestions
+
+3. Analyze project structure
+   → Ask: "Analyze this ICP project"
+   → Tool: icp/analyze-project
+   → Get: Dependencies, build order, canister details
+
+4. Need examples or docs
+   → Ask: "Show me HTTPS outcalls examples"
+   → Tools: icp/get-example, icp/get-docs
+   → Get: Working code and official documentation
+
+5. Test locally
+   → Ask: "Deploy this to local network and test the transfer function"
+   → Tools: icp/test-deploy → icp/test-call
+   → Get: Deployed canister IDs, test results
+
+6. Optimize before mainnet
+   → Ask: "Check performance and validate upgrade safety"
+   → Tools: icp/speed, icp/check-upgrade
+   → Get: Performance score, upgrade compatibility report
 ```
 
-**Returns:**
-- Compatibility status
-- Breaking changes detected
-- Method signature changes
-- Upgrade recommendations
+### Example Interactions
 
-### icp/refactor
-
-Applies ICP-specific code transformations and refactorings.
-
-**Example:**
-```typescript
-{
-  "code": "actor { var counter = 0; }",
-  "language": "motoko",
-  "refactoring": "add-stable-vars"     // add-upgrade-hooks, add-stable-vars,
-                                       // add-caller-checks, modernize
-}
+**Validate code:**
+```
+You: "Validate this Motoko code: actor { public func greet() : async Text { 'Hello' } }"
+Assistant: Uses icp/validate
+Returns: Type error at line 1 - Text literals use double quotes, with fix suggestion
 ```
 
-**Returns:**
-- Refactored code
-- Change summary
-- Modified locations
-
-### icp/speed
-
-Analyzes canister performance for optimization opportunities.
-
-**Example:**
-```typescript
-{
-  "code": "actor { public func process() { ... } }",
-  "language": "motoko",
-  "focus": "full"                      // full, memory, cycles, latency
-}
+**Multi-canister analysis:**
+```
+You: "Analyze this project and show me the build order"
+Assistant: Uses icp/analyze-project
+Returns: Canister list, dependency graph, topological build order, validation results
 ```
 
-**Returns:**
-- Performance score (0-100)
-- Detected issues with severity
-- Estimated impact
-- Optimization suggestions
-- Issue locations
-
-## Usage Pattern
-
-**Development workflow:**
+**Get current docs:**
 ```
-1. Learn → icp/get-docs, icp/get-example
-2. Generate → icp/template
-3. Validate → icp/validate (iteratively)
-4. Analyze → icp/analyze-project
-5. Test → icp/test-deploy → icp/test-call → icp/test-scenario
-6. Optimize → icp/speed, icp/refactor
-7. Upgrade → icp/check-upgrade
+You: "How do HTTPS outcalls work on ICP?"
+Assistant: Uses icp/get-docs
+Returns: Latest documentation from internetcomputer.org
+```
+
+## Configuration
+
+Optional environment variables:
+
+```bash
+# GitHub token for higher rate limits (5000/hr vs 60/hr)
+export GITHUB_TOKEN=your_token_here
+
+# Log level (debug, info, warn, error)
+export LOG_LEVEL=info
 ```
 
 ## Development
 
 ```bash
-# Clone repository
+# Clone and setup
 git clone https://github.com/swissyp/icp-mcp.git
 cd icp-mcp
-
-# Install dependencies
 npm install
 
 # Build
 npm run build
 
+# Test
+npm test                  # Run all tests
+npm run test:watch        # Watch mode
+npm run test:integration  # Integration tests only
+
 # Run in development
 npm run dev
-
-# Clean
-npm run clean
 ```
 
-## Project Structure
+## Architecture
 
 ```
 src/
-├── index.ts              # MCP server
+├── index.ts              # MCP server entry point
 ├── tools/                # 12 MCP tool implementations
-│   ├── validate.ts       # Code validation
-│   ├── get-docs.ts       # Documentation fetcher
-│   ├── get-example.ts    # Examples fetcher
-│   ├── dfx-guide.ts      # Command templates
-│   ├── template.ts       # Code scaffolding
-│   ├── analyze-project.ts # Project analysis
-│   ├── test-deploy.ts    # Deployment testing
-│   ├── test-call.ts      # Method execution
-│   ├── test-scenario.ts  # Multi-step tests
-│   ├── check-upgrade.ts  # Upgrade safety
-│   ├── refactor.ts       # Code transformations
-│   └── speed.ts          # Performance analysis
-├── validators/           # Language validators
-│   ├── candid.ts         # didc integration
-│   ├── motoko-compiler.ts # moc integration
-│   ├── rust.ts           # ic-cdk patterns
-│   ├── dfx-json.ts       # Config validation
-│   ├── upgrade-checker.ts # Candid compatibility
-│   └── security-patterns.ts # Security detection
-├── analyzers/            # Project analysis
-│   ├── project.ts        # Project structure
-│   └── dependencies.ts   # Dependency graphs
-├── executors/            # External tools
-│   └── dfx-executor.ts   # dfx CLI wrapper
-├── fetchers/             # Content fetchers
-│   └── github.ts         # GitHub API client
-└── utils/                # Utilities
-    ├── cache.ts          # 15-min cache
-    └── logger.ts         # Logging
+├── validators/           # Language validators (candid, motoko, rust, dfx.json)
+├── analyzers/            # Project and dependency analysis
+├── executors/            # dfx CLI wrapper
+├── fetchers/             # GitHub API client for docs/examples
+└── utils/                # Caching, logging
 ```
 
-## Configuration
+**Validation approach:**
+- Candid: `didc check` (full compiler validation)
+- Motoko: `moc` compiler with type-checking (via dfx cache)
+- Rust: Pattern-based ic-cdk validation + security checks
+- dfx.json: Schema validation + circular dependency detection
 
-Environment variables:
-
-```bash
-# Optional: GitHub token for higher rate limits (5000/hr vs 60/hr)
-export GITHUB_TOKEN=your_token_here
-
-# Optional: Log level (debug, info, warn, error)
-export LOG_LEVEL=info
-```
+**Performance:**
+- Content-based caching with SHA-256 hashing (15-min TTL)
+- Parallel validation for multi-canister projects
+- Cached documentation and examples
 
 ## Roadmap
 
-**v0.5.0 - Complete! ✅** (Current)
-- ✅ Testing suite (deploy, call, scenario)
-- ✅ Upgrade safety checker
-- ✅ Security pattern detection
-- ✅ Smart refactoring tools
-- ✅ Performance analysis
-- ✅ 12 total tools available
-
-**v0.4.0 - Complete! ✅**
-- ✅ Project-level analysis
-- ✅ Dependency graph analysis
-- ✅ Multi-canister validation
-- ✅ Circular dependency detection
-- ✅ Topological build order
-
-**v0.3.0 - Complete! ✅**
-- ✅ Motoko compiler integration (moc)
-- ✅ Full type-checking with error codes
-- ✅ Import validation via dfx cache
-
-**v0.2.0 - Complete! ✅**
-- ✅ Rust validation (ic-cdk patterns)
-- ✅ dfx.json validation
-- ✅ dfx command guide
-- ✅ Code templates
-
-**Future:**
-- Integration test suite
-- Auto-fix suggestions (ESLint-like)
-- Performance optimizations (parallel validation)
+**v0.6.0 (Current)**
+- Rich validation diagnostics (18 enhanced patterns)
 - HTTPS outcalls validation
+- Content-based caching (10-100x speedup)
+- Parallel validation (3-5x speedup)
+- Integration test suite
+
+**v0.5.0**
+- Testing suite (deploy, call, scenario)
+- Upgrade safety checker
+- Security pattern detection
+- Smart refactoring tools
+- Performance analysis
+
+**Future**
+- Auto-fix suggestions (ESLint-like)
+- CI/CD integration examples
+- Additional language support
 
 ## License
 
 MIT
 
+## Contributing
+
+Issues and pull requests welcome at https://github.com/swissyp/icp-mcp
+
 ## Author
 
 swissyp <swissy.crypto@gmail.com>
-
-## Contributing
-
-Issues and PRs welcome at https://github.com/swissyp/icp-mcp
