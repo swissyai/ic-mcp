@@ -1,5 +1,5 @@
 {
-  "name": "icp-mcp",
+  "name": "ic-mcp",
   "version": "0.6.1",
   "description": "Model Context Protocol server for Internet Computer development",
   "type": "module",

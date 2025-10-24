@@ -1,4 +1,4 @@
-# ICP-MCP
+# IC-MCP
 
 MCP server that gives Claude Code, Cursor, and Codex real-time ICP validation and documentation.
 
@@ -31,10 +31,10 @@ dfx --version
 didc --version
 ```
 
-### Install ICP-MCP
+### Install IC-MCP
 
 ```bash
-npm install -g icp-mcp
+npm install -g ic-mcp
 ```
 
 ### Configure Your AI Assistant
@@ -50,7 +50,7 @@ Configuration file location (create if it doesn't exist):
 {
   "mcpServers": {
     "icp": {
-      "command": "icp-mcp"
+      "command": "ic-mcp"
     }
   }
 }
@@ -63,7 +63,7 @@ Create `.cursor/mcp.json` in your project root:
 {
   "mcpServers": {
     "icp": {
-      "command": "icp-mcp"
+      "command": "ic-mcp"
     }
   }
 }
