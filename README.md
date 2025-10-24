@@ -290,4 +290,4 @@ Issues and pull requests welcome at https://github.com/swissyp/icp-mcp
 
 ## Author
 
-swissyp <swissy.crypto@gmail.com>
+[@swissyai](https://x.com/swissyai)
