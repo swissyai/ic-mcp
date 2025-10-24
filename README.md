@@ -229,7 +229,7 @@ import HashMap "mo:base/HashMap";  // Works in icp/validate
 
 ```bash
 # Clone and setup
-git clone https://github.com/swissyp/icp-mcp.git
+git clone https://github.com/swissyai/icp-mcp.git
 cd icp-mcp
 npm install
 
@@ -285,7 +285,7 @@ MIT
 
 ## Contributing
 
-Issues and pull requests welcome at https://github.com/swissyp/icp-mcp
+Issues and pull requests welcome at https://github.com/swissyai/icp-mcp
 
 ## Author
 
