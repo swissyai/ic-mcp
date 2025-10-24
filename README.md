@@ -24,14 +24,23 @@ Integrates with Claude Code, Cursor, and Windsurf to provide real-time validatio
 
 ### Prerequisites
 
+**Rust** (required for didc installation):
 ```bash
-# Install dfx (provides moc compiler)
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+```
+
+**dfx** (provides moc compiler):
+```bash
 sh -ci "$(curl -fsSL https://internetcomputer.org/install.sh)"
+```
 
-# Install didc for Candid validation
+**didc** (Candid validation):
+```bash
 cargo install --git https://github.com/dfinity/candid.git didc
+```
 
-# Verify
+**Verify installations:**
+```bash
 dfx --version
 didc --version
 ```
@@ -44,7 +53,14 @@ npm install -g icp-mcp
 
 ### Configure Your AI Assistant
 
-**Claude Code** (`~/Library/Application Support/Claude/claude_desktop_config.json`):
+**Claude Code:**
+
+Configuration file location (create if it doesn't exist):
+- macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
+- Windows: `%APPDATA%\Claude\claude_desktop_config.json`
+- Linux: `~/.config/Claude/claude_desktop_config.json`
+
+Add to configuration file:
 ```json
 {
   "mcpServers": {
@@ -55,7 +71,9 @@ npm install -g icp-mcp
 }
 ```
 
-**Cursor** (`.cursor/mcp.json` in your project):
+**Cursor:**
+
+Create `.cursor/mcp.json` in your project root:
 ```json
 {
   "mcpServers": {
@@ -66,9 +84,11 @@ npm install -g icp-mcp
 }
 ```
 
-**Windsurf** (similar to Cursor - check Windsurf docs for exact path).
+**Windsurf:**
 
-Restart your AI assistant after configuration.
+Check Windsurf documentation for MCP configuration. Format is similar to Cursor.
+
+**After configuration:** Restart your AI assistant to load the MCP server.
 
 ## Tools
 
@@ -159,14 +179,40 @@ Returns: Latest documentation from internetcomputer.org
 
 ## Configuration
 
-Optional environment variables:
+### Recommended: GitHub Token
+
+Documentation and example fetching uses GitHub API. Rate limits:
+- **Without token:** 60 requests/hour (quickly exhausted with doc browsing)
+- **With token:** 5000 requests/hour
+
+Set your token:
+```bash
+export GITHUB_TOKEN=ghp_xxxxxxxxxxxxx
+```
+
+Generate token at https://github.com/settings/tokens (requires `public_repo` scope)
+
+### Optional: Log Level
 
 ```bash
-# GitHub token for higher rate limits (5000/hr vs 60/hr)
-export GITHUB_TOKEN=your_token_here
+export LOG_LEVEL=info  # debug, info, warn, error
+```
 
-# Log level (debug, info, warn, error)
-export LOG_LEVEL=info
+## Known Limitations
+
+**Canister imports in standalone validation:**
+
+Code with `canister:` imports cannot be validated in isolation with `icp/validate`:
+
+```motoko
+import Token "canister:token";  // Requires project context
+```
+
+**Workaround:** Use `icp/analyze-project` which resolves canister dependencies from dfx.json and validates all canisters with proper import context.
+
+**Standard library imports work normally:**
+```motoko
+import HashMap "mo:base/HashMap";  // Works in icp/validate
 ```
 
 ## Development
