@@ -88,6 +88,14 @@ function checkStateManagement(code: string): ValidationIssue[] {
     issues.push({
       severity: 'error',
       message: 'Using static mut is unsafe and not recommended',
+      explanation: `ICP's Wasm runtime is single-threaded, but static mut in Rust is inherently unsafe and requires unsafe blocks for all access. It's also incompatible with the actor model where state should be managed through thread_local! with RefCell. Using static mut will cause compilation errors or undefined behavior in canisters.`,
+      suggestedFix: `thread_local! {\n    static STATE: RefCell<State> = RefCell::new(State::default());\n}\n\n#[update]\nfn modify_state() {\n    STATE.with(|s| s.borrow_mut().value += 1);\n}`,
+      references: [
+        'https://internetcomputer.org/docs/current/developer-docs/backend/rust/samples/state',
+        'https://doc.rust-lang.org/std/macro.thread_local.html',
+      ],
+      example: `use std::cell::RefCell;\n\nthread_local! {\n    static COUNTER: RefCell<u64> = RefCell::new(0);\n}\n\n#[query]\nfn get() -> u64 {\n    COUNTER.with(|c| *c.borrow())\n}\n\n#[update]\nfn increment() {\n    COUNTER.with(|c| *c.borrow_mut() += 1);\n}`,
+      // Deprecated
       suggestion: 'Use thread_local! with RefCell or Cell for shared mutable state',
       docUrl: 'https://internetcomputer.org/docs/current/developer-docs/backend/rust/samples/state',
     });
@@ -120,6 +128,14 @@ function checkCandidExport(code: string): ValidationIssue[] {
     issues.push({
       severity: 'warning',
       message: 'Missing Candid interface export',
+      explanation: 'The Candid interface defines your canister\'s public API and is essential for type-safe inter-canister calls and frontend integration. Without export_candid!(), you must manually maintain a .did file which is error-prone. The macro automatically generates the interface from your Rust code.',
+      suggestedFix: `// Add at the end of your file\nic_cdk::export_candid!();`,
+      references: [
+        'https://docs.rs/ic-cdk/latest/ic_cdk/macro.export_candid.html',
+        'https://internetcomputer.org/docs/current/developer-docs/backend/candid/candid-concepts',
+      ],
+      example: `use ic_cdk_macros::{query, update};\n\n#[query]\nfn greet(name: String) -> String {\n    format!("Hello, {}!", name)\n}\n\n#[update]\nfn set_name(name: String) {\n    // ...\n}\n\n// Generates .did file automatically\nic_cdk::export_candid!();`,
+      // Deprecated
       suggestion: 'Add ic_cdk::export_candid!(); at the end of your file to generate the Candid interface',
       docUrl: 'https://docs.rs/ic-cdk/latest/ic_cdk/macro.export_candid.html',
     });
