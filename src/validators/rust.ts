@@ -5,7 +5,7 @@
 
 import type { ValidationIssue, ValidationResult } from '../types/index.js';
 import { logger } from '../utils/logger.js';
-import { validationCache } from '../utils/cache.js';
+import { validationCache, generateCacheKey } from '../utils/cache.js';
 
 /**
  * Check for required ic-cdk imports
@@ -215,8 +215,8 @@ export async function validateRust(
 ): Promise<ValidationResult> {
   const enhancedSecurity = context?.securityCheck ?? false;
 
-  // Check cache
-  const cacheKey = `rust:${code}:sec=${enhancedSecurity}`;
+  // Check cache (content-based with SHA-256)
+  const cacheKey = generateCacheKey('rust:v1', code, { securityCheck: enhancedSecurity });
   const cached = validationCache.get(cacheKey);
   if (cached) {
     logger.debug('Using cached Rust validation result');

@@ -2,9 +2,24 @@
  * Simple in-memory cache with TTL
  */
 
+import { createHash } from 'crypto';
 import type { CacheEntry } from '../types/index.js';
 
 const DEFAULT_TTL = 15 * 60 * 1000; // 15 minutes
+
+/**
+ * Generate a cache key from code and context
+ * Uses SHA-256 for content-based caching
+ */
+export function generateCacheKey(
+  prefix: string,
+  code: string,
+  context?: Record<string, any>
+): string {
+  const content = code + (context ? JSON.stringify(context) : '');
+  const hash = createHash('sha256').update(content).digest('hex');
+  return `${prefix}:${hash}`;
+}
 
 export class Cache<T> {
   private cache = new Map<string, CacheEntry<T>>();

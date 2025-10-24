@@ -9,7 +9,7 @@ import { join } from 'path';
 import { promisify } from 'util';
 import type { ValidationIssue, ValidationResult } from '../types/index.js';
 import { logger } from '../utils/logger.js';
-import { validationCache } from '../utils/cache.js';
+import { validationCache, generateCacheKey } from '../utils/cache.js';
 
 const execAsync = promisify(exec);
 
@@ -98,8 +98,8 @@ function parseDidcError(stderr: string): ValidationIssue[] {
  * Validate Candid code using didc CLI
  */
 export async function validateCandid(code: string): Promise<ValidationResult> {
-  // Check cache
-  const cacheKey = `candid:${code}`;
+  // Check cache (content-based with SHA-256)
+  const cacheKey = generateCacheKey('candid:v1', code);
   const cached = validationCache.get(cacheKey);
   if (cached) {
     logger.debug('Using cached Candid validation result');

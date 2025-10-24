@@ -10,7 +10,7 @@ import { promisify } from 'util';
 import { existsSync } from 'fs';
 import type { ValidationIssue, ValidationResult } from '../types/index.js';
 import { logger } from '../utils/logger.js';
-import { validationCache } from '../utils/cache.js';
+import { validationCache, generateCacheKey } from '../utils/cache.js';
 
 /**
  * Actor alias for resolving canister imports
@@ -245,8 +245,10 @@ export async function compileMotokoCode(
   code: string,
   context?: CompilationContext
 ): Promise<ValidationResult> {
-  // Check cache
-  const cacheKey = `motoko-compile:${code}:${JSON.stringify(context?.actorAliases || [])}`;
+  // Check cache (content-based with SHA-256)
+  const cacheKey = generateCacheKey('motoko:v1', code, {
+    actorAliases: context?.actorAliases || [],
+  });
   const cached = validationCache.get(cacheKey);
   if (cached) {
     logger.debug('Using cached compilation result');

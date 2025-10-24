@@ -234,11 +234,12 @@ export async function executeAnalyzeProject(input: AnalyzeProjectInput): Promise
     output.push(formatDependencyGraph(graph));
   }
 
-  // Validation
+  // Validation (parallel for speed)
   if (shouldValidate) {
     const validation: ProjectValidation = {};
 
-    for (const canister of project.canisters) {
+    // Validate all canisters in parallel
+    const validationPromises = project.canisters.map(async (canister) => {
       // Only validate Motoko and Rust canisters
       if (canister.type === 'motoko' && canister.mainPath) {
         try {
@@ -251,29 +252,52 @@ export async function executeAnalyzeProject(input: AnalyzeProjectInput): Promise
             projectPath,
           };
 
-          validation[canister.name] = await compileMotokoCode(code, context);
+          return {
+            name: canister.name,
+            result: await compileMotokoCode(code, context),
+          };
         } catch (error: any) {
-          validation[canister.name] = {
-            valid: false,
-            issues: [{
-              severity: 'error',
-              message: `Failed to read main file: ${error.message}`,
-            }],
+          return {
+            name: canister.name,
+            result: {
+              valid: false,
+              issues: [{
+                severity: 'error',
+                message: `Failed to read main file: ${error.message}`,
+              }],
+            } as ValidationResult,
           };
         }
       } else if (canister.type === 'rust' && canister.mainPath) {
         try {
           const code = await readFile(canister.mainPath, 'utf-8');
-          validation[canister.name] = await validateRust(code);
+          return {
+            name: canister.name,
+            result: await validateRust(code),
+          };
         } catch (error: any) {
-          validation[canister.name] = {
-            valid: false,
-            issues: [{
-              severity: 'error',
-              message: `Failed to read main file: ${error.message}`,
-            }],
+          return {
+            name: canister.name,
+            result: {
+              valid: false,
+              issues: [{
+                severity: 'error',
+                message: `Failed to read main file: ${error.message}`,
+              }],
+            } as ValidationResult,
           };
         }
+      }
+      return null;
+    });
+
+    // Wait for all validations to complete
+    const results = await Promise.all(validationPromises);
+
+    // Build validation map from results
+    for (const result of results) {
+      if (result) {
+        validation[result.name] = result.result;
       }
     }
 

@@ -7,13 +7,23 @@ export type Language = 'candid' | 'motoko' | 'rust' | 'dfx-json';
 export type IssueSeverity = 'error' | 'warning' | 'info';
 
 export interface ValidationIssue {
+  // Core fields
   severity: IssueSeverity;
   line?: number;
   column?: number;
   message: string;
   code?: string;
-  suggestion?: string;
-  docUrl?: string;
+
+  // Rich diagnostics (always provided when available)
+  // These help users understand WHY issues matter on ICP specifically
+  explanation?: string;     // ICP-specific context and implications
+  suggestedFix?: string;   // Code snippet showing the fix
+  references?: string[];   // URLs to official documentation
+  example?: string;        // Complete working example demonstrating the pattern
+
+  // Deprecated (keep for backward compatibility)
+  suggestion?: string;     // Use suggestedFix instead
+  docUrl?: string;        // Use references[0] instead
 }
 
 export interface ValidationResult {
