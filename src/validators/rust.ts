@@ -6,6 +6,7 @@
 import type { ValidationIssue, ValidationResult } from '../types/index.js';
 import { logger } from '../utils/logger.js';
 import { validationCache, generateCacheKey } from '../utils/cache.js';
+import { checkHttpsOutcalls } from './security-patterns.js';
 
 /**
  * Check for required ic-cdk imports
@@ -271,6 +272,7 @@ export async function validateRust(
       const { checkRustSecurity } = await import('./security-patterns.js');
       logger.debug('Running enhanced security checks');
       issues.push(...checkRustSecurity(code));
+      issues.push(...checkHttpsOutcalls(code)); // HTTPS outcalls validation
     }
 
     // Check if there are any errors

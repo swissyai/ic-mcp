@@ -6,6 +6,130 @@
 import type { ValidationIssue } from '../types/index.js';
 
 /**
+ * Check for HTTPS outcalls patterns (both Motoko and Rust)
+ */
+export function checkHttpsOutcalls(code: string): ValidationIssue[] {
+  const issues: ValidationIssue[] = [];
+
+  // Check if code uses HTTPS outcalls
+  const usesHttpOutcalls =
+    code.includes('http_request') ||
+    code.includes('HttpRequest') ||
+    code.includes('management_canister') ||
+    code.includes('CanisterHttpRequest');
+
+  if (!usesHttpOutcalls) {
+    return issues;
+  }
+
+  // Check 1: Missing transform function
+  const hasTransform =
+    code.includes('transform') ||
+    code.includes('Transform') ||
+    code.includes('transform_func');
+
+  if (!hasTransform) {
+    issues.push({
+      severity: 'warning',
+      message: 'HTTPS outcall without transform function',
+      explanation:
+        'ICP HTTPS outcalls require consensus across replica nodes. Without a transform function, non-deterministic response data (timestamps, headers, cookies) will cause consensus failures and waste cycles. The transform function sanitizes responses to ensure all replicas agree on the result.',
+      suggestedFix: `// Motoko\nlet transform = {\n  function = transform_response;\n  context = Blob.fromArray([]);\n};\n\n// Rust\nlet transform = TransformContext {\n  function: TransformFunc(candid::Func {\n    principal: ic_cdk::id(),\n    method: "transform".to_string(),\n  }),\n  context: vec![],\n};`,
+      references: [
+        'https://internetcomputer.org/docs/current/developer-docs/smart-contracts/advanced-features/https-outcalls/https-outcalls-how-it-works',
+        'https://internetcomputer.org/docs/current/references/ic-interface-spec#ic-http_request',
+      ],
+      example: `// Transform function that strips non-deterministic data\nfunc transform_response(raw : HttpResponse) : HttpResponse {\n  {\n    status = raw.status;\n    body = raw.body;\n    headers = []; // Strip all headers for determinism\n  }\n};`,
+    });
+  }
+
+  // Check 2: URL length
+  const urlPattern = /url\s*[:=]\s*["']([^"']+)["']/gi;
+  const urls = Array.from(code.matchAll(urlPattern));
+
+  for (const match of urls) {
+    const url = match[1];
+    if (url.length > 8192) {
+      issues.push({
+        severity: 'error',
+        message: `HTTPS outcall URL exceeds 8192 character limit (${url.length} chars)`,
+        explanation:
+          'Per RFC-3986, ICP restricts HTTPS outcall URLs to 8192 characters maximum. URLs exceeding this limit will cause the outcall to trap, wasting cycles and potentially leaving your canister in an inconsistent state.',
+        suggestedFix:
+          'Shorten the URL or use POST with parameters in the request body instead of query parameters',
+        references: [
+          'https://www.rfc-editor.org/rfc/rfc3986',
+          'https://internetcomputer.org/docs/current/references/ic-interface-spec#ic-http_request',
+        ],
+      });
+    }
+  }
+
+  // Check 3: Response size limit
+  const hasMaxResponseBytes =
+    code.includes('max_response_bytes') || code.includes('maxResponseBytes');
+
+  if (!hasMaxResponseBytes) {
+    issues.push({
+      severity: 'info',
+      message: 'HTTPS outcall without explicit max_response_bytes',
+      explanation:
+        'Without specifying max_response_bytes, ICP defaults to 2MB maximum. Setting an appropriate limit prevents excessive cycle costs and protects against unexpectedly large responses that could trap your canister due to memory limits.',
+      suggestedFix:
+        'max_response_bytes = ?1_000_000; // 1MB limit\n// or\nmax_response_bytes: Some(1_000_000), // Rust',
+      references: [
+        'https://internetcomputer.org/docs/current/references/ic-interface-spec#ic-http_request',
+      ],
+      example: `let request = {\n  url = "https://api.example.com/data";\n  max_response_bytes = ?1_000_000; // 1MB\n  method = #get;\n  headers = [];\n  body = null;\n  transform = ?transform;\n};`,
+    });
+  }
+
+  // Check 4: HTTP method restrictions
+  const methodPattern = /method\s*[:=]\s*#?(get|post|head|put|delete|patch)/gi;
+  const methods = Array.from(code.matchAll(methodPattern));
+
+  for (const match of methods) {
+    const method = match[1].toLowerCase();
+    if (!['get', 'post', 'head'].includes(method)) {
+      issues.push({
+        severity: 'error',
+        message: `HTTPS outcall uses unsupported HTTP method: ${method}`,
+        explanation:
+          'ICP HTTPS outcalls only support GET, HEAD, and POST methods. This limitation ensures deterministic behavior across replicas and prevents side effects from methods like PUT/DELETE that might succeed on some replicas but fail on others.',
+        suggestedFix: `// Use supported methods only:\nmethod = #get;  // or #post or #head`,
+        references: [
+          'https://internetcomputer.org/docs/current/references/ic-interface-spec#ic-http_request',
+        ],
+      });
+    }
+  }
+
+  // Check 5: Explicit cycles payment
+  const hasCyclesPayment =
+    code.includes('Cycles.add') ||
+    code.includes('cycles =') ||
+    code.includes('with_cycles') ||
+    code.includes('call_with_payment');
+
+  if (!hasCyclesPayment) {
+    issues.push({
+      severity: 'warning',
+      message: 'HTTPS outcall without explicit cycles payment',
+      explanation:
+        'HTTPS outcalls consume cycles based on request/response size. Without explicitly specifying cycles, the call might fail if the canister has insufficient cycles, or waste cycles if too many are attached. Best practice is to calculate and attach the appropriate amount.',
+      suggestedFix: `// Motoko\nCycles.add(1_000_000_000); // 1B cycles\nlet response = await Management.http_request(request);\n\n// Rust\nlet (response,) = ic_cdk::api::call::call_with_payment(\n  Principal::management_canister(),\n  "http_request",\n  (request,),\n  1_000_000_000, // 1B cycles\n).await?;`,
+      references: [
+        'https://internetcomputer.org/docs/current/developer-docs/gas-cost',
+        'https://internetcomputer.org/docs/current/references/ic-interface-spec#ic-http_request',
+      ],
+      example: `// Calculate cycles based on request size\nlet base_cost = 3_000_000; // Base fee\nlet per_byte_cost = 100;\nlet request_size = request.body.size() + request.url.size();\nlet cycles_needed = base_cost + (request_size * per_byte_cost);\n\nCycles.add(cycles_needed);\nlet response = await Management.http_request(request);`,
+    });
+  }
+
+  return issues;
+}
+
+/**
  * Security check for Motoko code
  */
 export function checkMotokoSecurity(code: string): ValidationIssue[] {

@@ -4,7 +4,7 @@
 
 import type { ValidationResult } from '../types/index.js';
 import { compileMotokoCode } from './motoko-compiler.js';
-import { checkMotokoSecurity } from './security-patterns.js';
+import { checkMotokoSecurity, checkHttpsOutcalls } from './security-patterns.js';
 import { logger } from '../utils/logger.js';
 import { validationCache } from '../utils/cache.js';
 
@@ -32,7 +32,8 @@ export async function validateMotoko(
   if (securityCheck) {
     logger.debug('Running security pattern checks');
     const securityIssues = checkMotokoSecurity(code);
-    result.issues = [...result.issues, ...securityIssues];
+    const httpsIssues = checkHttpsOutcalls(code);
+    result.issues = [...result.issues, ...securityIssues, ...httpsIssues];
   }
 
   return result;
