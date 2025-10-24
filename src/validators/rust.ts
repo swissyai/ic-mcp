@@ -18,6 +18,14 @@ function checkImports(code: string): ValidationIssue[] {
     issues.push({
       severity: 'error',
       message: 'Missing ic_cdk import',
+      explanation: 'The ic_cdk crate is essential for ICP Rust canisters. It provides macros (#[query], #[update], #[init]) that generate the canister interface, handle Candid serialization, and integrate with the IC system API. Without it, your code cannot function as a canister.',
+      suggestedFix: 'use ic_cdk_macros::*;\nuse ic_cdk::api;',
+      references: [
+        'https://docs.rs/ic-cdk/latest/ic_cdk/',
+        'https://docs.rs/ic-cdk-macros/latest/ic_cdk_macros/',
+      ],
+      example: `use ic_cdk_macros::{query, update, init};\nuse ic_cdk::api::{caller, time};\n\n#[init]\nfn init() {\n    // Initialize canister\n}\n\n#[query]\nfn get_value() -> String {\n    "Hello".to_string()\n}`,
+      // Deprecated fields
       suggestion: 'Add: use ic_cdk::*; or use ic_cdk::{query, update, init};',
       docUrl: 'https://docs.rs/ic-cdk/latest/ic_cdk/',
     });
@@ -48,6 +56,14 @@ function checkMethodAttributes(code: string): ValidationIssue[] {
     issues.push({
       severity: 'warning',
       message: 'Public functions without #[query] or #[update] attributes',
+      explanation: 'Rust functions need #[query] or #[update] macros to be exposed as canister methods. #[query] methods are read-only, execute faster, and cost less cycles. #[update] methods can modify state but go through consensus. Without these attributes, your functions are not callable from the outside.',
+      suggestedFix: `#[query]\nfn read_data() -> String {\n    // Fast, read-only\n}\n\n#[update]\nfn write_data(value: String) {\n    // State-changing, goes through consensus\n}`,
+      references: [
+        'https://internetcomputer.org/docs/current/developer-docs/backend/rust/intercanister',
+        'https://docs.rs/ic-cdk-macros/latest/ic_cdk_macros/attr.query.html',
+      ],
+      example: `use ic_cdk_macros::{query, update};\n\n#[query]\nfn get_count() -> u64 {\n    COUNTER.with(|c| *c.borrow())\n}\n\n#[update]\nfn increment() {\n    COUNTER.with(|c| *c.borrow_mut() += 1);\n}`,
+      // Deprecated fields
       suggestion: 'Canister methods need #[query] for read-only or #[update] for state-changing operations',
       docUrl: 'https://docs.rs/ic-cdk/latest/ic_cdk/attr.query.html',
     });
