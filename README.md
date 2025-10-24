@@ -1,30 +1,14 @@
 # ICP-MCP
 
-Model Context Protocol server that makes AI coding assistants expert at Internet Computer development.
+MCP server that gives Claude Code, Cursor, and Codex real-time ICP validation and documentation.
 
-## Overview
+Uses actual Motoko and Candid compilers (moc/didc) for production-grade validation, not pattern matching approximations.
 
-Integrates with Claude Code, Cursor, and Windsurf to provide real-time validation, documentation access, and ICP-specific guidance. Uses actual Motoko and Candid compilers for production-grade validation, not pattern matching approximations.
-
-**Key capabilities:**
-- Live validation with moc/didc compilers (Motoko, Candid, Rust, dfx.json)
-- Real-time documentation from internetcomputer.org
-- Working code examples from dfinity/examples
-- Security pattern detection with ICP-specific explanations
-- Multi-canister project analysis and testing
-- Performance optimization suggestions
-
-**v0.6.0 improvements:**
-- Content-based validation caching (10-100x faster repeated checks)
-- Parallel multi-canister validation (3-5x faster)
-- 18 enhanced patterns with explanations, fix snippets, and documentation references
-- HTTPS outcalls validation (transform functions, URL limits, cycle management)
-
-## Quick Start
+## Install
 
 ### Prerequisites
 
-**Rust** (required for didc installation):
+**Rust** (required for didc):
 ```bash
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 ```
@@ -39,13 +23,13 @@ sh -ci "$(curl -fsSL https://internetcomputer.org/install.sh)"
 cargo install --git https://github.com/dfinity/candid.git didc
 ```
 
-**Verify installations:**
+**Verify:**
 ```bash
 dfx --version
 didc --version
 ```
 
-### Install
+### Install ICP-MCP
 
 ```bash
 npm install -g icp-mcp
@@ -60,7 +44,6 @@ Configuration file location (create if it doesn't exist):
 - Windows: `%APPDATA%\Claude\claude_desktop_config.json`
 - Linux: `~/.config/Claude/claude_desktop_config.json`
 
-Add to configuration file:
 ```json
 {
   "mcpServers": {
@@ -84,11 +67,23 @@ Create `.cursor/mcp.json` in your project root:
 }
 ```
 
-**Windsurf:**
+**Codex:**
 
-Check Windsurf documentation for MCP configuration. Format is similar to Cursor.
+Similar configuration to Cursor. Check Codex documentation for MCP config path.
 
-**After configuration:** Restart your AI assistant to load the MCP server.
+**After configuration:** Restart your AI assistant.
+
+### Recommended: GitHub Token
+
+Documentation and example fetching uses GitHub API. Rate limits:
+- **Without token:** 60 requests/hour (quickly exhausted with doc browsing)
+- **With token:** 5000 requests/hour
+
+```bash
+export GITHUB_TOKEN=ghp_xxxxxxxxxxxxx
+```
+
+Generate token at https://github.com/settings/tokens (requires `public_repo` scope)
 
 ## Tools
 
@@ -119,7 +114,7 @@ Check Windsurf documentation for MCP configuration. Format is similar to Cursor.
 | `icp/refactor` | Apply ICP-specific transformations | Add upgrade hooks, stable vars, caller checks |
 | `icp/speed` | Performance analysis | Find memory, cycle, and latency bottlenecks |
 
-## Usage in Your Workflow
+## Usage
 
 ### Development Flow
 
@@ -177,22 +172,37 @@ Assistant: Uses icp/get-docs
 Returns: Latest documentation from internetcomputer.org
 ```
 
+## Features
+
+**Live Validation:**
+- Candid: `didc check` (full compiler validation)
+- Motoko: `moc` compiler with type-checking (via dfx cache)
+- Rust: Pattern-based ic-cdk validation + security checks
+- dfx.json: Schema validation + circular dependency detection
+
+**Rich Diagnostics:**
+- ICP-specific explanations for every issue
+- Code snippets showing how to fix
+- Official documentation references
+- Working examples demonstrating correct patterns
+- 18 enhanced security and validation patterns
+
+**Performance:**
+- Content-based validation caching (10-100x faster repeated checks)
+- Parallel multi-canister validation (3-5x faster)
+- SHA-256 hash-based cache keys
+- 15-minute cache TTL
+
+**HTTPS Outcalls Validation:**
+- Missing transform function detection (consensus safety)
+- URL length validation (RFC-3986 limits)
+- Response size constraints
+- HTTP method restrictions
+- Explicit cycles payment checks
+
 ## Configuration
 
-### Recommended: GitHub Token
-
-Documentation and example fetching uses GitHub API. Rate limits:
-- **Without token:** 60 requests/hour (quickly exhausted with doc browsing)
-- **With token:** 5000 requests/hour
-
-Set your token:
-```bash
-export GITHUB_TOKEN=ghp_xxxxxxxxxxxxx
-```
-
-Generate token at https://github.com/settings/tokens (requires `public_repo` scope)
-
-### Optional: Log Level
+**Optional: Log Level**
 
 ```bash
 export LOG_LEVEL=info  # debug, info, warn, error
@@ -248,25 +258,14 @@ src/
 └── utils/                # Caching, logging
 ```
 
-**Validation approach:**
-- Candid: `didc check` (full compiler validation)
-- Motoko: `moc` compiler with type-checking (via dfx cache)
-- Rust: Pattern-based ic-cdk validation + security checks
-- dfx.json: Schema validation + circular dependency detection
-
-**Performance:**
-- Content-based caching with SHA-256 hashing (15-min TTL)
-- Parallel validation for multi-canister projects
-- Cached documentation and examples
-
 ## Roadmap
 
 **v0.6.0 (Current)**
 - Rich validation diagnostics (18 enhanced patterns)
-- HTTPS outcalls validation
-- Content-based caching (10-100x speedup)
-- Parallel validation (3-5x speedup)
-- Integration test suite
+- HTTPS outcalls validation (transform functions, URL limits, cycle management)
+- Content-based caching (10-100x speedup on repeated validations)
+- Parallel multi-canister validation (3-5x speedup)
+- Integration test suite (15 tests passing)
 
 **v0.5.0**
 - Testing suite (deploy, call, scenario)
