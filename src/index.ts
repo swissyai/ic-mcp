@@ -35,7 +35,7 @@ logger.setLevel(LogLevel[logLevel.toUpperCase() as keyof typeof LogLevel] || Log
 const server = new Server(
   {
     name: 'ic-mcp',
-    version: '0.6.1',
+    version: '0.6.2',
   },
   {
     capabilities: {
