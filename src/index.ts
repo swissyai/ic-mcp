@@ -16,6 +16,7 @@ import { getDocs, GetDocsInputSchema } from './tools/get-docs.js';
 import { getExample, GetExampleInputSchema } from './tools/get-example.js';
 import { dfxGuide, DfxGuideInputSchema } from './tools/dfx-guide.js';
 import { template, TemplateInputSchema } from './tools/template.js';
+import { motokoBase, MotokoBaseInputSchema, motokoBaseTool } from './tools/motoko-base.js';
 import { executeAnalyzeProject, analyzeProjectSchema, analyzeProjectTool } from './tools/analyze-project.js';
 import { executeTestDeploy, testDeploySchema, testDeployTool } from './tools/test-deploy.js';
 import { executeTestCall, testCallSchema, testCallTool } from './tools/test-call.js';
@@ -35,7 +36,7 @@ logger.setLevel(LogLevel[logLevel.toUpperCase() as keyof typeof LogLevel] || Log
 const server = new Server(
   {
     name: 'ic-mcp',
-    version: '0.6.2',
+    version: '0.7.0',
   },
   {
     capabilities: {
@@ -199,6 +200,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       checkUpgradeTool,
       refactorTool,
       speedTool,
+      motokoBaseTool,
     ],
   };
 });
@@ -325,6 +327,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             },
           ],
         };
+      }
+
+      case 'icp/motoko-base': {
+        const validatedArgs = MotokoBaseInputSchema.parse(args);
+        return await motokoBase(validatedArgs);
       }
 
       default:
