@@ -4,7 +4,7 @@ MCP server that gives Claude Code, Cursor, and Codex real-time ICP validation an
 
 Uses actual Motoko and Candid compilers (moc/didc) for production-grade validation, not pattern matching approximations.
 
-**Context Usage:** ~4k tokens (adds 12 specialized ICP development tools to your AI assistant)
+**Context Usage:** ~4.5k tokens (adds 13 specialized ICP development tools to your AI assistant)
 
 ## Install
 
