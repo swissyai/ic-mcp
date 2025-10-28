@@ -86,22 +86,9 @@ dfx --version && didc --version
 claude mcp add --scope user --transport stdio ic-mcp -- npx -y ic-mcp
 ```
 
-**Cursor:**
+**Other Editors (Cursor, Codex, etc):**
 ```json
-// .cursor/mcp.json in project root
-{
-  "mcpServers": {
-    "icp": {
-      "command": "ic-mcp"
-    }
-  }
-}
-```
-
-**Claude Desktop:**
-```json
-// ~/Library/Application Support/Claude/claude_desktop_config.json (macOS)
-// %APPDATA%\Claude\claude_desktop_config.json (Windows)
+// Add to your editor's MCP config:
 {
   "mcpServers": {
     "icp": {
