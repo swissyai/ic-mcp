@@ -16,7 +16,8 @@ import { getDocs, GetDocsInputSchema } from './tools/get-docs.js';
 import { getExample, GetExampleInputSchema } from './tools/get-example.js';
 import { dfxGuide, DfxGuideInputSchema } from './tools/dfx-guide.js';
 import { template, TemplateInputSchema } from './tools/template.js';
-import { motokoBase, MotokoBaseInputSchema, motokoBaseTool } from './tools/motoko-base.js';
+import { motokoCore, MotokoCoreInputSchema, motokoCoreTool } from './tools/motoko-core.js';
+import { migrationGuide, MigrationGuideInputSchema, migrationGuideTool } from './tools/migration-guide.js';
 import { executeAnalyzeProject, analyzeProjectSchema, analyzeProjectTool } from './tools/analyze-project.js';
 import { executeTestDeploy, testDeploySchema, testDeployTool } from './tools/test-deploy.js';
 import { executeTestCall, testCallSchema, testCallTool } from './tools/test-call.js';
@@ -200,7 +201,8 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       checkUpgradeTool,
       refactorTool,
       speedTool,
-      motokoBaseTool,
+      motokoCoreTool,
+      migrationGuideTool,
     ],
   };
 });
@@ -329,9 +331,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
       }
 
-      case 'icp/motoko-base': {
-        const validatedArgs = MotokoBaseInputSchema.parse(args);
-        return await motokoBase(validatedArgs);
+      case 'icp/motoko-core': {
+        const validatedArgs = MotokoCoreInputSchema.parse(args);
+        return await motokoCore(validatedArgs);
+      }
+
+      case 'icp/base-to-core-migration': {
+        const validatedArgs = MigrationGuideInputSchema.parse(args);
+        return await migrationGuide(validatedArgs);
       }
 
       default:
@@ -367,7 +374,7 @@ async function main() {
   await server.connect(transport);
 
   logger.info('ICP-MCP Server started');
-  logger.info('Available tools (12):');
+  logger.info('Available tools (14):');
   logger.info('  Validation:');
   logger.info('    - icp/validate (Code validation with security checks)');
   logger.info('    - icp/analyze-project (Project analysis)');
@@ -384,6 +391,9 @@ async function main() {
   logger.info('  Optimization:');
   logger.info('    - icp/refactor (Smart refactoring)');
   logger.info('    - icp/speed (Performance analysis)');
+  logger.info('  Library:');
+  logger.info('    - icp/motoko-core (Core library documentation)');
+  logger.info('    - icp/base-to-core-migration (Migration guide)');
 }
 
 main().catch((error) => {

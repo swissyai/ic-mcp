@@ -1,6 +1,6 @@
 /**
- * MCP tool: icp/motoko-base
- * Provides instant access to Motoko base library documentation
+ * MCP tool: icp/motoko-core
+ * Provides instant access to Motoko core library documentation
  */
 
 import { z } from 'zod';
@@ -8,7 +8,7 @@ import { logger } from '../utils/logger.js';
 import { docsCache } from '../utils/cache.js';
 
 // Input schema
-export const MotokoBaseInputSchema = z.object({
+export const MotokoCoreInputSchema = z.object({
   module: z
     .string()
     .describe('Module name (e.g., List, Array, HashMap, Buffer, Text, Int, Nat, etc.)'),
@@ -23,30 +23,67 @@ export const MotokoBaseInputSchema = z.object({
     .describe('Include usage examples (default: true)'),
 });
 
-export type MotokoBaseInput = z.infer<typeof MotokoBaseInputSchema>;
+export type MotokoCoreInput = z.infer<typeof MotokoCoreInputSchema>;
 
 // Common Motoko modules with descriptions
-const MODULES_INFO: Record<string, { description: string; priority: number }> = {
-  'List': { description: 'Purely-functional singly-linked lists', priority: 1 },
+const MODULES_INFO: Record<string, { description: string; priority: number; path?: string }> = {
+  // Core data structures
   'Array': { description: 'Mutable and immutable array operations', priority: 1 },
-  'HashMap': { description: 'Mutable hash map for key-value storage', priority: 1 },
-  'Buffer': { description: 'Growable, mutable sequences', priority: 1 },
   'Text': { description: 'Text/string operations and utilities', priority: 1 },
-  'Iter': { description: 'Iteration over collections', priority: 2 },
+  'Map': { description: 'Ordered maps (red-black trees)', priority: 1 },
+  'Set': { description: 'Ordered sets', priority: 1 },
+  'VarArray': { description: 'Variable-size mutable arrays', priority: 1 },
+
+  // Numeric types
   'Nat': { description: 'Natural numbers (non-negative)', priority: 2 },
   'Int': { description: 'Integer operations', priority: 2 },
+  'Float': { description: 'Floating-point operations', priority: 2 },
+  'Nat8': { description: '8-bit natural numbers', priority: 3 },
+  'Nat16': { description: '16-bit natural numbers', priority: 3 },
+  'Nat32': { description: '32-bit natural numbers', priority: 3 },
+  'Nat64': { description: '64-bit natural numbers', priority: 3 },
+  'Int8': { description: '8-bit integers', priority: 3 },
+  'Int16': { description: '16-bit integers', priority: 3 },
+  'Int32': { description: '32-bit integers', priority: 3 },
+  'Int64': { description: '64-bit integers', priority: 3 },
+
+  // Control flow and utilities
+  'Iter': { description: 'Iteration over collections', priority: 2 },
   'Result': { description: 'Error handling with Result<Ok, Err>', priority: 2 },
   'Option': { description: 'Optional values (null safety)', priority: 2 },
-  'Blob': { description: 'Binary data operations', priority: 3 },
-  'Principal': { description: 'Principal IDs for identity', priority: 3 },
+  'Error': { description: 'Error handling and propagation', priority: 2 },
+
+  // System and runtime
+  'Principal': { description: 'Principal IDs for identity', priority: 2 },
+  'Cycles': { description: 'Cycle management and accounting', priority: 2 },
   'Time': { description: 'Time and timestamp utilities', priority: 3 },
+  'Timer': { description: 'Timer scheduling and management', priority: 3 },
   'Debug': { description: 'Debugging utilities', priority: 3 },
-  'Map': { description: 'Ordered maps (red-black trees)', priority: 3 },
-  'Set': { description: 'Ordered sets', priority: 3 },
-  'TrieMap': { description: 'Hash tries for persistent maps', priority: 4 },
-  'AssocList': { description: 'Association lists', priority: 4 },
-  'Heap': { description: 'Priority queues', priority: 4 },
-  'Deque': { description: 'Double-ended queues', priority: 4 },
+  'Runtime': { description: 'Runtime information and control', priority: 3 },
+  'InternetComputer': { description: 'IC system API bindings', priority: 3 },
+  'CertifiedData': { description: 'Certified data management', priority: 3 },
+
+  // Data types
+  'Blob': { description: 'Binary data operations', priority: 3 },
+  'Bool': { description: 'Boolean operations', priority: 3 },
+  'Char': { description: 'Character operations', priority: 3 },
+  'Order': { description: 'Ordering comparisons', priority: 3 },
+
+  // Additional data structures
+  'Queue': { description: 'FIFO queue operations', priority: 3 },
+  'Stack': { description: 'LIFO stack operations', priority: 3 },
+  'Random': { description: 'Pseudorandom number generation', priority: 4 },
+  'Region': { description: 'Low-level memory regions', priority: 4 },
+  'Func': { description: 'Function utilities', priority: 4 },
+  'Types': { description: 'Type utilities and definitions', priority: 4 },
+  'Tuples': { description: 'Tuple utilities and operations', priority: 4 },
+
+  // Pure (immutable) modules
+  'pure/List': { description: 'Immutable singly-linked lists', priority: 2, path: 'pure/List' },
+  'pure/Map': { description: 'Immutable ordered maps', priority: 2, path: 'pure/Map' },
+  'pure/Set': { description: 'Immutable ordered sets', priority: 2, path: 'pure/Set' },
+  'pure/Queue': { description: 'Immutable FIFO queues', priority: 2, path: 'pure/Queue' },
+  'pure/RealTimeQueue': { description: 'Immutable real-time queues', priority: 3, path: 'pure/RealTimeQueue' },
 };
 
 interface MethodInfo {
@@ -106,13 +143,16 @@ function parseMotokoModule(content: string, moduleName: string): ModuleDoc {
     typeDefinitions.push(...typeMatches.map(t => t.replace(/\s+/g, ' ').trim() + ';'));
   }
 
+  const moduleInfo = MODULES_INFO[moduleName];
+  const modulePath = moduleInfo?.path || moduleName;
+
   return {
     module: moduleName,
-    description: MODULES_INFO[moduleName]?.description || '',
-    overview: overview.trim() || MODULES_INFO[moduleName]?.description || '',
+    description: moduleInfo?.description || '',
+    overview: overview.trim() || moduleInfo?.description || '',
     methods: methods.slice(0, 20), // Limit to top 20 methods
     typeDefinitions: typeDefinitions.slice(0, 5), // Limit type definitions
-    importStatement: `import ${moduleName} "mo:base/${moduleName}";`,
+    importStatement: `import ${moduleName.split('/').pop()} "mo:core/${modulePath}";`,
   };
 }
 
@@ -191,17 +231,17 @@ function extractMethodInfo(lines: string[], startIdx: number): MethodInfo | null
  * Fetch module source from GitHub
  */
 async function fetchModuleSource(moduleName: string): Promise<string | null> {
-  const cacheKey = `motoko-base-${moduleName}`;
+  const cacheKey = `motoko-core-${moduleName}`;
 
-  // Check cache (1 hour for base library docs)
+  // Check cache (1 hour for core library docs)
   const cached = await docsCache.get(cacheKey);
   if (cached) {
-    logger.info(`Using cached Motoko base docs for ${moduleName}`);
+    logger.info(`Using cached Motoko core docs for ${moduleName}`);
     return cached as string;
   }
 
   try {
-    const url = `https://raw.githubusercontent.com/dfinity/motoko-base/master/src/${moduleName}.mo`;
+    const url = `https://raw.githubusercontent.com/dfinity/motoko-core/main/src/${moduleName}.mo`;
     const response = await fetch(url);
 
     if (!response.ok) {
@@ -220,12 +260,12 @@ async function fetchModuleSource(moduleName: string): Promise<string | null> {
 }
 
 /**
- * Get Motoko base library documentation
+ * Get Motoko core library documentation
  */
-export async function getMotokoBase(input: MotokoBaseInput) {
+export async function getMotokoCore(input: MotokoCoreInput) {
   const { module: moduleName, method, examples } = input;
 
-  logger.info(`Getting Motoko base docs for ${moduleName}${method ? `.${method}` : ''}`);
+  logger.info(`Getting Motoko core docs for ${moduleName}${method ? `.${method}` : ''}`);
 
   // Validate module exists
   if (!MODULES_INFO[moduleName]) {
@@ -267,8 +307,8 @@ export async function getMotokoBase(input: MotokoBaseInput) {
               fallback: {
                 module: moduleName,
                 description: MODULES_INFO[moduleName].description,
-                importStatement: `import ${moduleName} "mo:base/${moduleName}";`,
-                hint: 'Check the official docs at https://internetcomputer.org/docs/current/motoko/main/base/',
+                importStatement: `import ${moduleName} "mo:core/${moduleName}";`,
+                hint: 'Check the official docs at https://internetcomputer.org/docs/motoko/core',
               },
             },
             null,
@@ -352,7 +392,7 @@ function formatMethodDoc(moduleName: string, method: MethodInfo, includeExamples
     doc += `**Example:**\n\`\`\`motoko\n${method.example}\n\`\`\`\n\n`;
   }
 
-  doc += `**Import:** \`import ${moduleName} "mo:base/${moduleName}";\`\n`;
+  doc += `**Import:** \`import ${moduleName} "mo:core/${moduleName}";\`\n`;
 
   return doc;
 }
@@ -361,7 +401,7 @@ function formatMethodDoc(moduleName: string, method: MethodInfo, includeExamples
  * Format module documentation
  */
 function formatModuleDoc(moduleDoc: ModuleDoc, includeExamples: boolean): string {
-  let doc = `# Motoko Base: ${moduleDoc.module}\n\n`;
+  let doc = `# Motoko Core: ${moduleDoc.module}\n\n`;
   doc += `${moduleDoc.overview}\n\n`;
   doc += `**Import:** \`${moduleDoc.importStatement}\`\n\n`;
 
@@ -446,29 +486,29 @@ function formatModuleDoc(moduleDoc: ModuleDoc, includeExamples: boolean): string
  */
 function getModuleTips(moduleName: string): string[] {
   const tips: Record<string, string[]> = {
-    'List': [
-      'Lists are immutable and operations return new lists',
+    'pure/List': [
+      'Immutable lists - all operations return new lists',
       'Prepending (push) is O(1), appending is O(n)',
-      'Consider Array or Buffer for random access needs',
+      'Consider Array or VarArray for random access needs',
       'Use List.iterate() for efficient traversal',
     ],
     'Array': [
       'Arrays have fixed size after creation',
       'Use Array.tabulate() for initialization',
       'Array.mutate() for in-place updates (when var)',
-      'Consider Buffer for dynamic sizing',
+      'Consider VarArray for dynamic sizing',
     ],
-    'HashMap': [
-      'Requires both hash and equal functions for keys',
-      'Use Text.hash and Text.equal for Text keys',
-      'Pre-size with expected capacity for performance',
-      'Consider TrieMap for persistence across upgrades',
+    'Map': [
+      'Ordered map based on red-black trees',
+      'O(log n) insertion, deletion, and lookup',
+      'Use Map.fromIter() to create from an iterator',
+      'Migrated from base: HashMap users should switch to Map',
     ],
-    'Buffer': [
+    'VarArray': [
       'Growable arrays with amortized O(1) append',
-      'Use buffer.toArray() to convert to immutable Array',
+      'Replacement for deprecated Buffer module',
+      'Use varArray.toArray() to convert to immutable Array',
       'Good for building collections incrementally',
-      'Clear with buffer.clear() to reset',
     ],
     'Text': [
       'Texts are immutable in Motoko',
@@ -486,22 +526,46 @@ function getModuleTips(moduleName: string): string[] {
       'Iterators are consumed after use',
       'Use Iter.toArray() to materialize results',
       'Efficient for lazy evaluation and streaming',
-      'Many collection types provide .vals() or .entries() iterators',
+      'Note: range() is now EXCLUSIVE - use rangeInclusive() for old behavior',
+    ],
+    'Cycles': [
+      'Manage canister cycles programmatically',
+      'Was ExperimentalCycles in base, now stable',
+      'Use Cycles.balance() to check current balance',
+      'Cycles.add() before inter-canister calls',
+    ],
+    'Timer': [
+      'Schedule recurring or one-time tasks',
+      'Timer.setTimer() for one-time execution',
+      'Timer.recurringTimer() for repeated execution',
+      'Cancel with Timer.cancelTimer()',
+    ],
+    'pure/Map': [
+      'Immutable ordered map implementation',
+      'All operations return new map instances',
+      'Good for stable memory persistence',
+      'Replacement for deprecated TrieMap',
+    ],
+    'pure/Set': [
+      'Immutable ordered set implementation',
+      'All operations return new set instances',
+      'Good for stable memory persistence',
+      'Replacement for deprecated TrieSet',
     ],
   };
 
   return tips[moduleName] || [
-    `Import with: import ${moduleName} "mo:base/${moduleName}";`,
+    `Import with: import ${moduleName} "mo:core/${moduleName}";`,
     'Check official docs for complete API reference',
     'Most operations are immutable and return new values',
   ];
 }
 
 // Tool definition for MCP
-export const motokoBaseTool = {
-  name: 'icp/motoko-base',
+export const motokoCoreTool = {
+  name: 'icp/motoko-core',
   description:
-    'Get instant documentation for Motoko base library modules (List, Array, HashMap, Buffer, Text, etc.). Returns module overview, method signatures with complexity, usage examples, and tips. Eliminates need to manually copy documentation.',
+    'Get instant documentation for Motoko core library modules (Array, Map, Text, List, etc.) and their methods. Query specific modules ("How do Arrays work?"), methods ("Array.tabulate"), or general topics ("array operations in Motoko"). Returns signatures, complexities, examples, and tips.',
   inputSchema: {
     type: 'object',
     properties: {
@@ -523,4 +587,4 @@ export const motokoBaseTool = {
 };
 
 // Export for testing
-export const motokoBase = getMotokoBase;
+export const motokoCore = getMotokoCore;

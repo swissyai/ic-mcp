@@ -28,7 +28,7 @@ function generateMotokoCanister(name: string, features: string[] = []): Record<s
   const hasUpgradeHooks = features.includes('upgrade-hooks');
   const hasTimer = features.includes('timer');
 
-  const mainMo = `${hasUpgradeHooks ? 'import Debug "mo:base/Debug";\n\n' : ''}persistent actor ${name} {
+  const mainMo = `${hasUpgradeHooks ? 'import Debug "mo:core/Debug";\n\n' : ''}persistent actor ${name} {
   ${hasStableVars ? `// Persistent state\n  var counter : Nat = 0;\n` : ''}
   ${hasTimer ? `\n  // Timer\n  system func timer(setGlobalTimer : Nat64 -> ()) : async () {\n    // Timer logic here\n    Debug.print("Timer fired");\n  };\n` : ''}
   // Query method (read-only)

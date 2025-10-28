@@ -72,7 +72,7 @@ export async function findMocPath(): Promise<string | null> {
 }
 
 /**
- * Find base package path for imports
+ * Find core package path for imports
  */
 async function findBasePath(): Promise<string | null> {
   if (basePathCache !== undefined) {
@@ -81,8 +81,16 @@ async function findBasePath(): Promise<string | null> {
 
   try {
     const cacheDir = (await execAsync('dfx cache show')).stdout.trim();
+    // Try core first (new standard library)
+    const corePath = join(cacheDir, 'core');
+
+    if (existsSync(corePath)) {
+      basePathCache = corePath;
+      return corePath;
+    }
+
+    // Fall back to base for backward compatibility
     const basePath = join(cacheDir, 'base');
-    
     if (existsSync(basePath)) {
       basePathCache = basePath;
       return basePath;

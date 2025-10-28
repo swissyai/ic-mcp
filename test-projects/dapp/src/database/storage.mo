@@ -1,5 +1,5 @@
-import Array "mo:base/Array";
-import Nat "mo:base/Nat";
+import Array "mo:core/Array";
+import Nat "mo:core/Nat";
 
 actor Database {
   stable var users : [Text] = [];

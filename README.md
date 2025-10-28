@@ -2,9 +2,25 @@
 
 MCP server that gives Claude Code, Cursor, and Codex real-time ICP validation and documentation.
 
+## Quick Start (Claude Code CLI)
+
+Add IC-MCP to Claude Code in one command:
+
+```bash
+# Project-specific (current project only)
+claude mcp add --transport stdio ic-mcp -- npx -y ic-mcp
+
+# Global (all projects)
+claude mcp add --scope user --transport stdio ic-mcp -- npx -y ic-mcp
+```
+
+That's it! IC-MCP is now available in Claude Code. Skip to [Usage](#usage) to start using it.
+
+---
+
 Uses actual Motoko and Candid compilers (moc/didc) for production-grade validation, not pattern matching approximations.
 
-**Context Usage:** ~4.5k tokens (adds 13 specialized ICP development tools to your AI assistant)
+**Context Usage:** ~3k tokens (adds 14 specialized ICP development tools to your AI assistant)
 
 ## Install
 
@@ -39,7 +55,21 @@ npm install -g ic-mcp
 
 ### Configure Your AI Assistant
 
-**Claude Code:**
+**Claude Code (CLI):**
+
+Use the built-in MCP manager:
+```bash
+# Add globally (recommended - available in all projects)
+claude mcp add --scope user --transport stdio ic-mcp -- npx -y ic-mcp
+
+# Or add to current project only
+claude mcp add --transport stdio ic-mcp -- npx -y ic-mcp
+
+# Verify connection
+claude mcp list
+```
+
+**Claude Desktop App:**
 
 Configuration file location (create if it doesn't exist):
 - macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
@@ -224,7 +254,7 @@ import Token "canister:token";  // Requires project context
 
 **Standard library imports work normally:**
 ```motoko
-import HashMap "mo:base/HashMap";  // Works in icp/validate
+import Map "mo:core/Map";  // Works in icp/validate
 ```
 
 ## Development

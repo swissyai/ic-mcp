@@ -161,7 +161,7 @@ export function checkMotokoSecurity(code: string): ValidationIssue[] {
       message: `Unbounded ${structure.type} '${structure.name}' may cause heap overflow`,
       line: structure.line,
       explanation: `ICP canisters have a 4GB heap limit. Unbounded data structures like ${structure.type} can grow indefinitely as users interact with your canister, eventually causing out-of-memory traps that brick the canister. Without size limits or pagination, an attacker could deliberately fill the structure to cause denial of service.`,
-      suggestedFix: `// Option 1: Add size limit\nif (${structure.name}.size() >= MAX_SIZE) {\n  return #err("Storage limit reached");\n};\n\n// Option 2: Use stable memory\nimport StableMemory "mo:base/StableMemory";`,
+      suggestedFix: `// Option 1: Add size limit\nif (${structure.name}.size() >= MAX_SIZE) {\n  return #err("Storage limit reached");\n};\n\n// Option 2: Use stable memory\nimport StableMemory "mo:core/StableMemory";`,
       references: [
         'https://internetcomputer.org/docs/current/motoko/main/stablememory',
         'https://internetcomputer.org/docs/current/developer-docs/smart-contracts/best-practices/storage',
@@ -179,7 +179,7 @@ export function checkMotokoSecurity(code: string): ValidationIssue[] {
       severity: 'info',
       message: 'Arithmetic operations without overflow protection',
       explanation: 'Motoko Nat and Int types have unbounded precision, but operations can still trap on division by zero. Using built-in checked arithmetic functions (Nat.add, Int.sub, etc.) provides explicit error handling instead of traps. This is especially important for financial calculations where precision matters.',
-      suggestedFix: 'import Nat "mo:base/Nat";\nimport Int "mo:base/Int";\n\nlet result = Nat.add(a, b); // Explicit, clearer than +',
+      suggestedFix: 'import Nat "mo:core/Nat";\nimport Int "mo:core/Int";\n\nlet result = Nat.add(a, b); // Explicit, clearer than +',
       references: [
         'https://internetcomputer.org/docs/current/motoko/main/base/Nat',
         'https://internetcomputer.org/docs/current/motoko/main/base/Int',
