@@ -1,6 +1,6 @@
 # IC-MCP
 
-Real-time ICP validation in your AI assistant using actual Motoko and Candid compilers.
+MCP server for ICP that gives Claude Code, Cursor, and Codex real-time validation and documentation.
 
 ## Install
 
@@ -33,30 +33,20 @@ Ask your AI assistant to:
 "Find memory leaks in this canister"
 ```
 
-## Examples
+## Example Workflows
 
-**Building a DEX:**
-```
-You: "Create a swap canister with atomic transactions"
-AI: Generates Motoko with stable vars, validates with moc compiler
-You: "Deploy and test a swap"
-AI: Deploys locally, calls swap method, shows results
-```
+```bash
+# Build a DEX canister with validation
+"Create a swap canister with atomic transactions"  # Generates Motoko, validates with moc
+"Deploy and test a swap"                          # Deploys locally, executes test swap
 
-**Debugging production issues:**
-```
-You: "Why is this canister using so many cycles?"
-AI: Analyzes code, finds unbounded loops and large stable vars
-You: "How do I fix it?"
-AI: Shows refactored code with pagination and efficient data structures
-```
+# Debug performance issues
+"Why is this canister using so many cycles?"      # Finds unbounded loops, large stable vars
+"Refactor for better performance"                 # Applies optimizations, pagination
 
-**Upgrading safely:**
-```
-You: "Will this upgrade break existing clients?"
-AI: Compares Candid interfaces, finds removed methods
-You: "Add backward compatibility"
-AI: Adds deprecated methods that proxy to new implementation
+# Safe upgrades
+"Check if this upgrade breaks clients"            # Compares Candid interfaces
+"Add backward compatibility"                      # Generates compatibility layer
 ```
 
 ## Full Setup
@@ -139,58 +129,13 @@ Get one at https://github.com/settings/tokens (needs `public_repo` scope).
 | `icp/refactor` | Apply ICP-specific transformations | Add upgrade hooks, stable vars, caller checks |
 | `icp/speed` | Performance analysis | Find memory, cycle, and latency bottlenecks |
 
-## Workflows
+### Motoko Documentation
 
-### Build → Validate → Deploy → Test
+| Tool | Purpose | Example Use |
+|------|---------|-------------|
+| `icp/motoko-core` | Instant docs for Motoko core library | Query Array, Map, List module methods and examples |
+| `icp/base-to-core-migration` | Migration guide from base to core | Find replacements for deprecated base library imports |
 
-```bash
-# 1. Generate boilerplate
-"Create a Motoko token canister with stable storage"
-
-# 2. Validate as you write
-"Check this code: [paste code]"
-# → Get exact compiler errors with line numbers
-
-# 3. Deploy locally
-"Deploy this project"
-# → Returns canister IDs
-
-# 4. Test methods
-"Call transfer with (principal 'xxx', 100)"
-# → See decoded results
-```
-
-### Debug Existing Projects
-
-```bash
-# Understand structure
-"Analyze this ICP project"
-# → Dependency graph, build order, line counts
-
-# Check for issues
-"Validate all canisters"
-# → Compiler errors across entire project
-
-# Performance analysis
-"Find bottlenecks in this canister"
-# → Memory leaks, cycle waste, slow operations
-```
-
-### Production Checklist
-
-```bash
-# Before upgrading
-"Check if this interface breaks existing clients"
-# → Candid compatibility report
-
-# Security audit
-"Add caller validation to public methods"
-# → Automatic refactoring
-
-# Performance optimization
-"Analyze cycle usage"
-# → Ranked list of expensive operations
-```
 
 ## Features
 
