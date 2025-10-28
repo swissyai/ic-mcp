@@ -1,28 +1,47 @@
 /**
- * MCP tool: icp/motoko-core
- * Provides instant access to Motoko core library documentation
+ * Motoko Core Documentation Tool with Batch Support
+ * Provides comprehensive module documentation
  */
 
 import { z } from 'zod';
 import { logger } from '../utils/logger.js';
-import { docsCache } from '../utils/cache.js';
 
-// Input schema
-export const MotokoCoreInputSchema = z.object({
+// Enhanced input schema with batch support
+export const EnhancedMotokoCoreInputSchema = z.object({
+  modules: z
+    .array(z.string())
+    .optional()
+    .describe('Batch fetch multiple modules (efficient)'),
   module: z
     .string()
-    .describe('Module name (e.g., List, Array, HashMap, Buffer, Text, Int, Nat, etc.)'),
+    .optional()
+    .describe('Single module name'),
   method: z
     .string()
     .optional()
-    .describe('Optional: specific method name (e.g., add, filter, map, size)'),
+    .describe('Specific method to get details for'),
   examples: z
     .boolean()
     .optional()
     .default(true)
-    .describe('Include usage examples (default: true)'),
-});
+    .describe('Include code examples'),
+  includeComplexity: z
+    .boolean()
+    .optional()
+    .default(true)
+    .describe('Include time/space complexity info'),
+  includeLinks: z
+    .boolean()
+    .optional()
+    .default(true)
+    .describe('Include documentation links'),
+}).refine(
+  (data) => data.modules || data.module,
+  { message: 'Either modules (array) or module (string) must be provided' }
+);
 
+// Also export as MotokoCoreInputSchema for compatibility
+export const MotokoCoreInputSchema = EnhancedMotokoCoreInputSchema;
 export type MotokoCoreInput = z.infer<typeof MotokoCoreInputSchema>;
 
 // Common Motoko modules with descriptions
@@ -98,493 +117,445 @@ interface ModuleDoc {
   module: string;
   description: string;
   overview: string;
-  methods: MethodInfo[];
-  typeDefinitions?: string[];
-  importStatement: string;
+  import: string;
+  methods?: MethodInfo[];
+  relatedModules?: string[];
+  tips?: string[];
+}
+
+// Module corrections and suggestions
+const MODULE_CORRECTIONS: Record<string, string[]> = {
+  'list': ['pure/List', 'List'],
+  'map': ['Map', 'pure/Map'],
+  'set': ['Set', 'pure/Set'],
+  'queue': ['Queue', 'pure/Queue', 'pure/RealTimeQueue'],
+  'array': ['Array', 'VarArray'],
+  'hashmap': ['Map'],
+  'buffer': ['VarArray'],
+  'triemap': ['pure/Map'],
+  'trieset': ['pure/Set'],
+  'heap': ['Use custom implementation or Array with sorting'],
+  'hash': ['No direct replacement - removed for security'],
+  'assoclist': ['Map'],
+  'deque': ['pure/Queue'],
+  'orderedmap': ['pure/Map'],
+  'orderedset': ['pure/Set'],
+};
+
+/**
+ * Get suggestions for unknown module
+ */
+function getSuggestions(input: string): string[] {
+  const suggestions: string[] = [];
+  const query = input.toLowerCase();
+
+  // Check direct corrections
+  if (MODULE_CORRECTIONS[query]) {
+    suggestions.push(...MODULE_CORRECTIONS[query]);
+  }
+
+  // All valid modules
+  const validModules = Object.keys(MODULES_INFO);
+
+  // Find partial matches
+  for (const mod of validModules) {
+    if (mod.toLowerCase().includes(query) && !suggestions.includes(mod)) {
+      suggestions.push(mod);
+    }
+  }
+
+  return suggestions.slice(0, 5);
 }
 
 /**
- * Parse a .mo file to extract documentation
+ * Get related modules
  */
-function parseMotokoModule(content: string, moduleName: string): ModuleDoc {
-  const lines = content.split('\n');
-  const methods: MethodInfo[] = [];
-  let overview = '';
-  let inOverview = true;
-
-  // Extract module overview (first doc comment block)
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-
-    if (inOverview) {
-      if (line.startsWith('///')) {
-        const docLine = line.substring(3).trim();
-        if (docLine && !docLine.startsWith(':::') && !docLine.includes('```')) {
-          overview += docLine + ' ';
-        }
-      } else if (line.includes('module {')) {
-        inOverview = false;
-      }
-    }
-
-    // Look for public functions
-    if (line.includes('public func')) {
-      const methodInfo = extractMethodInfo(lines, i);
-      if (methodInfo) {
-        methods.push(methodInfo);
-      }
-    }
-  }
-
-  // Extract type definitions
-  const typeDefinitions: string[] = [];
-  const typeMatches = content.match(/public type \w+.*?(?=;)/gs);
-  if (typeMatches) {
-    typeDefinitions.push(...typeMatches.map(t => t.replace(/\s+/g, ' ').trim() + ';'));
-  }
-
-  const moduleInfo = MODULES_INFO[moduleName];
-  const modulePath = moduleInfo?.path || moduleName;
-
-  return {
-    module: moduleName,
-    description: moduleInfo?.description || '',
-    overview: overview.trim() || moduleInfo?.description || '',
-    methods: methods.slice(0, 20), // Limit to top 20 methods
-    typeDefinitions: typeDefinitions.slice(0, 5), // Limit type definitions
-    importStatement: `import ${moduleName.split('/').pop()} "mo:core/${modulePath}";`,
-  };
-}
-
-/**
- * Extract method information from lines starting at given index
- */
-function extractMethodInfo(lines: string[], startIdx: number): MethodInfo | null {
-  let description = '';
-  let example = '';
-  let complexity = '';
-
-  // Look backwards for documentation
-  for (let i = startIdx - 1; i >= Math.max(0, startIdx - 20); i--) {
-    const line = lines[i];
-    if (!line.includes('///')) break;
-
-    const docLine = line.substring(3).trim();
-
-    // Extract complexity
-    if (docLine.includes('O(')) {
-      const complexityMatch = docLine.match(/O\([^)]+\)/);
-      if (complexityMatch) {
-        complexity = complexityMatch[0];
-      }
-    }
-
-    // Extract example
-    if (docLine.includes('Example:') || lines[i + 1]?.includes('```motoko')) {
-      // Find the example code block
-      for (let j = i; j < Math.min(lines.length, i + 10); j++) {
-        if (lines[j].includes('```motoko')) {
-          j++;
-          while (j < lines.length && !lines[j].includes('```')) {
-            example += lines[j] + '\n';
-            j++;
-          }
-          break;
-        }
-      }
-    }
-
-    // Extract description (first line of doc)
-    if (!description && docLine && !docLine.includes('Example:') &&
-        !docLine.includes('|') && !docLine.includes('```')) {
-      description = docLine;
-    }
-  }
-
-  // Extract function signature
-  const funcLine = lines[startIdx];
-  const signatureMatch = funcLine.match(/public func (\w+)(<[^>]+>)?\s*\([^)]*\)(?:\s*:\s*[^{]+)?/);
-
-  if (!signatureMatch) return null;
-
-  const funcName = signatureMatch[1];
-  let signature = signatureMatch[0]
-    .replace('public func ', '')
-    .replace(/\s+/g, ' ')
-    .trim();
-
-  // Clean up signature
-  if (signature.includes('{')) {
-    signature = signature.substring(0, signature.indexOf('{')).trim();
-  }
-
-  return {
-    name: funcName,
-    signature,
-    description: description || `${funcName} operation`,
-    complexity,
-    example: example.trim(),
-  };
-}
-
-/**
- * Fetch module source from GitHub
- */
-async function fetchModuleSource(moduleName: string): Promise<string | null> {
-  const cacheKey = `motoko-core-${moduleName}`;
-
-  // Check cache (1 hour for core library docs)
-  const cached = await docsCache.get(cacheKey);
-  if (cached) {
-    logger.info(`Using cached Motoko core docs for ${moduleName}`);
-    return cached as string;
-  }
-
-  try {
-    const url = `https://raw.githubusercontent.com/dfinity/motoko-core/main/src/${moduleName}.mo`;
-    const response = await fetch(url);
-
-    if (!response.ok) {
-      logger.error(`Failed to fetch ${moduleName}.mo: ${response.status}`);
-      return null;
-    }
-
-    const content = await response.text();
-    await docsCache.set(cacheKey, content, 3600); // Cache for 1 hour
-
-    return content;
-  } catch (error) {
-    logger.error(`Error fetching ${moduleName}.mo:`, error);
-    return null;
-  }
-}
-
-/**
- * Get Motoko core library documentation
- */
-export async function getMotokoCore(input: MotokoCoreInput) {
-  const { module: moduleName, method, examples } = input;
-
-  logger.info(`Getting Motoko core docs for ${moduleName}${method ? `.${method}` : ''}`);
-
-  // Validate module exists
-  if (!MODULES_INFO[moduleName]) {
-    // Try to find similar module names
-    const available = Object.keys(MODULES_INFO);
-    const suggestions = available.filter(m =>
-      m.toLowerCase().includes(moduleName.toLowerCase()) ||
-      moduleName.toLowerCase().includes(m.toLowerCase())
-    );
-
-    return {
-      content: [
-        {
-          type: 'text' as const,
-          text: JSON.stringify(
-            {
-              error: `Module '${moduleName}' not found`,
-              suggestions: suggestions.length > 0 ? suggestions : available.slice(0, 10),
-              hint: 'Use one of the available modules listed above',
-            },
-            null,
-            2
-          ),
-        },
-      ],
-    };
-  }
-
-  // Fetch module source
-  const source = await fetchModuleSource(moduleName);
-  if (!source) {
-    return {
-      content: [
-        {
-          type: 'text' as const,
-          text: JSON.stringify(
-            {
-              error: 'Failed to fetch module documentation',
-              fallback: {
-                module: moduleName,
-                description: MODULES_INFO[moduleName].description,
-                importStatement: `import ${moduleName} "mo:core/${moduleName}";`,
-                hint: 'Check the official docs at https://internetcomputer.org/docs/motoko/core',
-              },
-            },
-            null,
-            2
-          ),
-        },
-      ],
-    };
-  }
-
-  // Parse the module
-  const moduleDoc = parseMotokoModule(source, moduleName);
-
-  // Filter by method if specified
-  if (method) {
-    const methodInfo = moduleDoc.methods.find(m =>
-      m.name.toLowerCase() === method.toLowerCase()
-    );
-
-    if (methodInfo) {
-      return {
-        content: [
-          {
-            type: 'text' as const,
-            text: formatMethodDoc(moduleName, methodInfo, examples),
-          },
-        ],
-      };
-    } else {
-      // Method not found, suggest similar ones
-      const suggestions = moduleDoc.methods
-        .filter(m => m.name.toLowerCase().includes(method.toLowerCase()))
-        .map(m => m.name);
-
-      return {
-        content: [
-          {
-            type: 'text' as const,
-            text: JSON.stringify(
-              {
-                error: `Method '${method}' not found in ${moduleName}`,
-                availableMethods: moduleDoc.methods.map(m => ({
-                  name: m.name,
-                  signature: m.signature,
-                })).slice(0, 15),
-                suggestions,
-              },
-              null,
-              2
-            ),
-          },
-        ],
-      };
-    }
-  }
-
-  // Return full module documentation
-  return {
-    content: [
-      {
-        type: 'text' as const,
-        text: formatModuleDoc(moduleDoc, examples),
-      },
+function getRelatedModules(moduleName: string): Array<{ name: string; reason: string }> {
+  const relations: Record<string, Array<{ name: string; reason: string }>> = {
+    'Array': [
+      { name: 'VarArray', reason: 'Mutable version with dynamic sizing' },
+      { name: 'pure/List', reason: 'Functional alternative' },
+      { name: 'Iter', reason: 'Iteration utilities' },
+    ],
+    'VarArray': [
+      { name: 'Array', reason: 'Immutable version' },
+      { name: 'List', reason: 'Alternative mutable collection' },
+    ],
+    'Map': [
+      { name: 'pure/Map', reason: 'Immutable version' },
+      { name: 'Set', reason: 'When you only need keys' },
+    ],
+    'pure/Map': [
+      { name: 'Map', reason: 'Mutable version' },
+      { name: 'pure/Set', reason: 'Immutable set alternative' },
+    ],
+    'List': [
+      { name: 'pure/List', reason: 'Immutable version' },
+      { name: 'VarArray', reason: 'Alternative with better random access' },
+      { name: 'Queue', reason: 'For FIFO operations' },
+    ],
+    'pure/List': [
+      { name: 'List', reason: 'Mutable version' },
+      { name: 'Array', reason: 'For random access needs' },
+    ],
+    'Queue': [
+      { name: 'pure/Queue', reason: 'Immutable version' },
+      { name: 'Stack', reason: 'For LIFO operations' },
+      { name: 'pure/RealTimeQueue', reason: 'O(1) guaranteed operations' },
+    ],
+    'Int': [
+      { name: 'Nat', reason: 'For non-negative values' },
+      { name: 'Float', reason: 'For decimal numbers' },
+    ],
+    'Nat': [
+      { name: 'Int', reason: 'For signed values' },
+      { name: 'Nat64', reason: 'For bounded values' },
+    ],
+    'Option': [
+      { name: 'Result', reason: 'For error handling' },
+    ],
+    'Result': [
+      { name: 'Option', reason: 'For nullable values' },
+      { name: 'Error', reason: 'For error details' },
     ],
   };
+
+  return relations[moduleName] || [];
 }
 
 /**
- * Format method documentation
- */
-function formatMethodDoc(moduleName: string, method: MethodInfo, includeExamples: boolean): string {
-  let doc = `# ${moduleName}.${method.name}\n\n`;
-  doc += `**Signature:** \`${method.signature}\`\n\n`;
-  doc += `**Description:** ${method.description}\n\n`;
-
-  if (method.complexity) {
-    doc += `**Complexity:** ${method.complexity}\n\n`;
-  }
-
-  if (includeExamples && method.example) {
-    doc += `**Example:**\n\`\`\`motoko\n${method.example}\n\`\`\`\n\n`;
-  }
-
-  doc += `**Import:** \`import ${moduleName} "mo:core/${moduleName}";\`\n`;
-
-  return doc;
-}
-
-/**
- * Format module documentation
- */
-function formatModuleDoc(moduleDoc: ModuleDoc, includeExamples: boolean): string {
-  let doc = `# Motoko Core: ${moduleDoc.module}\n\n`;
-  doc += `${moduleDoc.overview}\n\n`;
-  doc += `**Import:** \`${moduleDoc.importStatement}\`\n\n`;
-
-  // Type definitions
-  if (moduleDoc.typeDefinitions && moduleDoc.typeDefinitions.length > 0) {
-    doc += '## Type Definitions\n\n';
-    moduleDoc.typeDefinitions.forEach(type => {
-      doc += `\`\`\`motoko\n${type}\n\`\`\`\n\n`;
-    });
-  }
-
-  // Common methods
-  doc += '## Common Methods\n\n';
-
-  // Group methods by functionality
-  const crud = moduleDoc.methods.filter(m =>
-    ['add', 'push', 'put', 'set', 'insert', 'append', 'remove', 'delete', 'pop', 'clear'].includes(m.name)
-  );
-  const query = moduleDoc.methods.filter(m =>
-    ['get', 'find', 'contains', 'has', 'size', 'isEmpty', 'isNil', 'length'].includes(m.name)
-  );
-  const transform = moduleDoc.methods.filter(m =>
-    ['map', 'filter', 'fold', 'reduce', 'sort', 'reverse', 'flatten'].includes(m.name)
-  );
-  const others = moduleDoc.methods.filter(m =>
-    ![...crud, ...query, ...transform].includes(m)
-  );
-
-  if (crud.length > 0) {
-    doc += '### Create/Update/Delete\n\n';
-    crud.forEach(m => {
-      doc += `- **${m.name}**: \`${m.signature}\`\n`;
-      if (m.complexity) doc += `  - Complexity: ${m.complexity}\n`;
-      doc += `  - ${m.description}\n`;
-      if (includeExamples && m.example) {
-        doc += `  \`\`\`motoko\n  ${m.example.split('\n').join('\n  ')}\n  \`\`\`\n`;
-      }
-      doc += '\n';
-    });
-  }
-
-  if (query.length > 0) {
-    doc += '### Query Operations\n\n';
-    query.forEach(m => {
-      doc += `- **${m.name}**: \`${m.signature}\`\n`;
-      if (m.complexity) doc += `  - Complexity: ${m.complexity}\n`;
-      doc += `  - ${m.description}\n\n`;
-    });
-  }
-
-  if (transform.length > 0) {
-    doc += '### Transformations\n\n';
-    transform.forEach(m => {
-      doc += `- **${m.name}**: \`${m.signature}\`\n`;
-      if (m.complexity) doc += `  - Complexity: ${m.complexity}\n`;
-      doc += `  - ${m.description}\n\n`;
-    });
-  }
-
-  if (others.length > 0) {
-    doc += '### Other Methods\n\n';
-    others.slice(0, 10).forEach(m => {
-      doc += `- **${m.name}**: \`${m.signature}\`\n`;
-      doc += `  - ${m.description}\n\n`;
-    });
-  }
-
-  // Usage tips
-  doc += '\n## Usage Tips\n\n';
-
-  // Add module-specific tips
-  const tips = getModuleTips(moduleDoc.module);
-  tips.forEach(tip => {
-    doc += `- ${tip}\n`;
-  });
-
-  return doc;
-}
-
-/**
- * Get module-specific usage tips
+ * Get usage tips for modules
  */
 function getModuleTips(moduleName: string): string[] {
   const tips: Record<string, string[]> = {
-    'pure/List': [
-      'Immutable lists - all operations return new lists',
-      'Prepending (push) is O(1), appending is O(n)',
-      'Consider Array or VarArray for random access needs',
-      'Use List.iterate() for efficient traversal',
-    ],
     'Array': [
       'Arrays have fixed size after creation',
-      'Use Array.tabulate() for initialization',
-      'Array.mutate() for in-place updates (when var)',
-      'Consider VarArray for dynamic sizing',
-    ],
-    'Map': [
-      'Ordered map based on red-black trees',
-      'O(log n) insertion, deletion, and lookup',
-      'Use Map.fromIter() to create from an iterator',
-      'Migrated from base: HashMap users should switch to Map',
+      'Use VarArray for growable arrays',
+      'Array.tabulate() is efficient for initialization',
+      'Consider pure/List for functional programming',
     ],
     'VarArray': [
-      'Growable arrays with amortized O(1) append',
-      'Replacement for deprecated Buffer module',
-      'Use varArray.toArray() to convert to immutable Array',
+      'Direct replacement for deprecated Buffer module',
+      'Amortized O(1) append operation',
+      'Use toArray() to convert to immutable Array',
       'Good for building collections incrementally',
     ],
-    'Text': [
-      'Texts are immutable in Motoko',
-      'Use Text.concat() sparingly (creates new string)',
-      'Text.split() returns an iterator, not array',
-      'Consider Char operations for single character work',
+    'Map': [
+      'Mutable B-tree map with O(log n) operations',
+      'Direct replacement for deprecated HashMap',
+      'Use pure/Map for immutable needs',
+      'Requires comparison function for keys',
     ],
-    'Result': [
-      'Use for explicit error handling',
-      'Pattern match with switch for exhaustive handling',
-      'Chain with Result.chain() for sequential operations',
-      'Convert to Option with Result.toOption()',
-    ],
-    'Iter': [
-      'Iterators are consumed after use',
-      'Use Iter.toArray() to materialize results',
-      'Efficient for lazy evaluation and streaming',
-      'Note: range() is now EXCLUSIVE - use rangeInclusive() for old behavior',
-    ],
-    'Cycles': [
-      'Manage canister cycles programmatically',
-      'Was ExperimentalCycles in base, now stable',
-      'Use Cycles.balance() to check current balance',
-      'Cycles.add() before inter-canister calls',
-    ],
-    'Timer': [
-      'Schedule recurring or one-time tasks',
-      'Timer.setTimer() for one-time execution',
-      'Timer.recurringTimer() for repeated execution',
-      'Cancel with Timer.cancelTimer()',
+    'pure/List': [
+      'Immutable singly-linked list',
+      'O(1) prepend, O(n) append',
+      'Perfect for functional programming',
+      'Use List for mutable needs',
     ],
     'pure/Map': [
-      'Immutable ordered map implementation',
-      'All operations return new map instances',
-      'Good for stable memory persistence',
+      'Immutable red-black tree implementation',
+      'All operations return new instances',
+      'Safe for stable memory persistence',
       'Replacement for deprecated TrieMap',
     ],
-    'pure/Set': [
-      'Immutable ordered set implementation',
-      'All operations return new set instances',
-      'Good for stable memory persistence',
-      'Replacement for deprecated TrieSet',
+    'Principal': [
+      'Use Principal.fromText() to parse textual principals',
+      'Principal.equal() for comparing principals',
+      'Principal.toBlob() for hashing',
+    ],
+    'Cycles': [
+      'Check balance with Cycles.balance()',
+      'Accept cycles with Cycles.accept()',
+      'Add cycles to calls with Cycles.add()',
+    ],
+    'Option': [
+      'Use Option.get() with default value',
+      'Option.map() for transformations',
+      'Pattern match with switch for safety',
+    ],
+    'Result': [
+      'Chain operations with Result.chain()',
+      'Use Result.mapErr() to transform errors',
+      'Result.fromOption() for conversion',
+    ],
+    'Timer': [
+      'Use Timer.setTimer() for one-off timers',
+      'Timer.recurringTimer() for periodic tasks',
+      'Always cancel timers when done',
     ],
   };
 
-  return tips[moduleName] || [
-    `Import with: import ${moduleName} "mo:core/${moduleName}";`,
-    'Check official docs for complete API reference',
-    'Most operations are immutable and return new values',
-  ];
+  return tips[moduleName] || [];
 }
 
-// Tool definition for MCP
+/**
+ * Generate module documentation
+ */
+function generateModuleDoc(moduleName: string): ModuleDoc {
+  const moduleInfo = MODULES_INFO[moduleName];
+
+  if (!moduleInfo) {
+    throw new Error(`Module '${moduleName}' not found`);
+  }
+
+
+  return {
+    module: moduleName,
+    description: moduleInfo.description,
+    overview: `The ${moduleName} module provides ${moduleInfo.description.toLowerCase()}.`,
+    import: `import ${moduleName.includes('/') ? moduleName.split('/')[1] : moduleName} "mo:core/${moduleName}";`,
+    tips: getModuleTips(moduleName),
+    relatedModules: getRelatedModules(moduleName).map(r => r.name),
+  };
+}
+
+/**
+ * Format module documentation with optional enhancements
+ */
+function formatModuleDoc(doc: ModuleDoc, options: any): string {
+  const output: string[] = [];
+
+  // Add header with links if requested
+  if (options.includeLinks !== false) {
+    const baseName = doc.module.replace('/', '/');
+    output.push(`# Motoko Core: ${doc.module}`);
+    output.push('');
+    output.push('## Quick Links');
+    output.push(`- [Official Documentation](https://internetcomputer.org/docs/motoko/core/${baseName})`);
+    output.push(`- [Source Code](https://github.com/dfinity/motoko-core/blob/main/src/${baseName}.mo)`);
+    output.push(`- [Try in Playground](https://play.motoko.org/?tag=${doc.module.toLowerCase()})`);
+    output.push('');
+  } else {
+    output.push(`# Motoko Core: ${doc.module}`);
+    output.push('');
+  }
+
+  // Basic information
+  output.push(`**Description**: ${doc.description}`);
+  output.push('');
+  output.push(`**Import**: \`${doc.import}\``);
+  output.push('');
+  output.push(doc.overview);
+  output.push('');
+
+  // Add usage tips
+  if (doc.tips && doc.tips.length > 0) {
+    output.push('## Usage Tips');
+    for (const tip of doc.tips) {
+      output.push(`- ${tip}`);
+    }
+    output.push('');
+  }
+
+  // Add related modules
+  if (doc.relatedModules && doc.relatedModules.length > 0) {
+    output.push('## Related Modules');
+    const related = getRelatedModules(doc.module);
+    for (const rel of related) {
+      output.push(`- **${rel.name}**: ${rel.reason}`);
+    }
+    output.push('');
+  }
+
+  return output.join('\n');
+}
+
+/**
+ * Main handler with batch support
+ */
+export async function enhancedMotokoCore(input: any) {
+  try {
+    // Handle batch requests
+    if (input.modules && input.modules.length > 0) {
+      logger.info(`Batch fetching ${input.modules.length} modules`);
+
+      const results: string[] = [];
+
+      for (const moduleName of input.modules) {
+        try {
+          const doc = generateModuleDoc(moduleName);
+          results.push(formatModuleDoc(doc, input));
+        } catch (error: any) {
+          // Handle module not found with suggestions
+          const suggestions = getSuggestions(moduleName);
+
+          if (suggestions.length > 0) {
+            const errorInfo = {
+              error: `Module '${moduleName}' not found`,
+              suggestions,
+              hint: `Did you mean: ${suggestions[0]}?`,
+              tip: 'Use icp/discover with action: "list-all" to see all available modules',
+            };
+
+            // Special handling for deprecated modules
+            if (MODULE_CORRECTIONS[moduleName.toLowerCase()]) {
+              const correction = MODULE_CORRECTIONS[moduleName.toLowerCase()][0];
+              errorInfo.hint = `${moduleName} was deprecated. Use ${correction} instead.`;
+            }
+
+            results.push(JSON.stringify(errorInfo, null, 2));
+          } else {
+            results.push(JSON.stringify({
+              error: error.message,
+              module: moduleName,
+              tip: 'Use icp/discover to explore available modules',
+            }, null, 2));
+          }
+        }
+      }
+
+      const output: string[] = [
+        `# Batch Module Documentation`,
+        ``,
+        `Retrieved ${results.length} module(s)`,
+        ``,
+      ];
+
+      for (let i = 0; i < results.length; i++) {
+        if (i > 0) output.push(`---`);
+        output.push(``);
+        output.push(results[i]);
+        output.push(``);
+      }
+
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: output.join('\n'),
+          },
+        ],
+      };
+    }
+
+    // Handle single module request
+    if (input.module) {
+      logger.info(`Fetching documentation for module: ${input.module}`);
+
+      try {
+        const doc = generateModuleDoc(input.module);
+        const result = formatModuleDoc(doc, input);
+
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: result,
+            },
+          ],
+        };
+      } catch (error: any) {
+        // Handle module not found with suggestions
+        const suggestions = getSuggestions(input.module);
+
+        if (suggestions.length > 0) {
+          const errorInfo = {
+            error: `Module '${input.module}' not found`,
+            suggestions,
+            hint: `Did you mean: ${suggestions[0]}?`,
+            tip: 'Use icp/discover with action: "list-all" to see all available modules',
+          };
+
+          // Special handling for deprecated modules
+          if (MODULE_CORRECTIONS[input.module.toLowerCase()]) {
+            const correction = MODULE_CORRECTIONS[input.module.toLowerCase()][0];
+            errorInfo.hint = `${input.module} was deprecated. Use ${correction} instead.`;
+          }
+
+          return {
+            content: [
+              {
+                type: 'text' as const,
+                text: JSON.stringify(errorInfo, null, 2),
+              },
+            ],
+          };
+        }
+
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: JSON.stringify({
+                error: error.message,
+                module: input.module,
+                tip: 'Use icp/discover to explore available modules',
+              }, null, 2),
+            },
+          ],
+        };
+      }
+    }
+
+    // No modules specified
+    return {
+      content: [
+        {
+          type: 'text' as const,
+          text: JSON.stringify({
+            error: 'No modules specified',
+            tip: 'Use either "module" for single or "modules" for batch requests',
+            examples: {
+              single: { module: 'Array', examples: true },
+              batch: { modules: ['Array', 'Map', 'pure/List'], includeLinks: true },
+              withMethod: { module: 'Map', method: 'insert', examples: true },
+            },
+            discovery: 'Use icp/discover { action: "list-all" } to see available modules',
+          }, null, 2),
+        },
+      ],
+      isError: true,
+    };
+
+  } catch (error: any) {
+    logger.error('Motoko Core error:', error);
+
+    return {
+      content: [
+        {
+          type: 'text' as const,
+          text: JSON.stringify({
+            error: error.message,
+            suggestion: 'Use icp/discover to find available modules',
+          }, null, 2),
+        },
+      ],
+      isError: true,
+    };
+  }
+}
+
+// Export for backward compatibility
+export const motokoCore = enhancedMotokoCore;
+
+// Export tool definition
 export const motokoCoreTool = {
   name: 'icp/motoko-core',
-  description:
-    'Get instant documentation for Motoko core library modules (Array, Map, Text, List, etc.) and their methods. Query specific modules ("How do Arrays work?"), methods ("Array.tabulate"), or general topics ("array operations in Motoko"). Returns signatures, complexities, examples, and tips.',
+  description: `Get instant documentation for Motoko core library modules with batch support.`,
   inputSchema: {
     type: 'object',
     properties: {
+      modules: {
+        type: 'array',
+        items: { type: 'string' },
+        description: 'Batch fetch multiple modules',
+      },
       module: {
         type: 'string',
-        description: 'Module name (e.g., List, Array, HashMap, Buffer, Text, Int, Nat)',
+        description: 'Single module name',
       },
       method: {
         type: 'string',
-        description: 'Optional: specific method name (e.g., add, filter, map, size)',
+        description: 'Specific method to get details for',
       },
       examples: {
         type: 'boolean',
         description: 'Include usage examples (default: true)',
       },
+      includeLinks: {
+        type: 'boolean',
+        description: 'Include documentation links (default: true)',
+      },
     },
-    required: ['module'],
   },
 };
-
-// Export for testing
-export const motokoCore = getMotokoCore;

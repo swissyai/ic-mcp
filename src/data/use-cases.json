@@ -1,0 +1,182 @@
+{
+  "generated": "2025-10-28T19:26:53.842Z",
+  "version": "1.0.0",
+  "useCases": [
+    {
+      "m": "Array",
+      "k": "always, lists, collections, iteration, sorting, filtering, mapping, core data structure, immutable sequences"
+    },
+    {
+      "m": "VarArray",
+      "k": "mutable arrays, dynamic lists, resizable collections, buffer operations, in-place modifications"
+    },
+    {
+      "m": "Buffer",
+      "k": "growing arrays, dynamic allocation, append operations, queue implementation, streaming data"
+    },
+    {
+      "m": "Map",
+      "k": "key-value storage, dictionaries, lookup tables, caching, configuration, ordered maps, tree-based"
+    },
+    {
+      "m": "HashMap",
+      "k": "hash tables, fast lookups, unordered maps, O(1) access, large datasets, caching layer"
+    },
+    {
+      "m": "RBTree",
+      "k": "balanced trees, sorted maps, range queries, ordered iteration, guaranteed O(log n)"
+    },
+    {
+      "m": "TrieMap",
+      "k": "prefix matching, string keys, autocomplete, routing tables, hierarchical data"
+    },
+    {
+      "m": "Set",
+      "k": "unique values, deduplication, membership testing, set operations, collections without duplicates"
+    },
+    {
+      "m": "TrieSet",
+      "k": "string sets, prefix sets, word dictionaries, unique string collections"
+    },
+    {
+      "m": "List",
+      "k": "functional programming, recursive structures, pattern matching, immutable sequences, cons lists"
+    },
+    {
+      "m": "Queue",
+      "k": "FIFO, task processing, message queues, breadth-first search, event handling, buffering"
+    },
+    {
+      "m": "Stack",
+      "k": "LIFO, undo operations, expression parsing, depth-first search, call stacks, recursion"
+    },
+    {
+      "m": "Deque",
+      "k": "double-ended queue, sliding windows, palindrome checking, bidirectional processing"
+    },
+    {
+      "m": "Bool",
+      "k": "boolean logic, conditionals, flags, binary states, validation, true/false operations"
+    },
+    {
+      "m": "Char",
+      "k": "character processing, string parsing, text analysis, unicode handling, tokenization"
+    },
+    {
+      "m": "Text",
+      "k": "always, strings, text manipulation, concatenation, substring, formatting, user input, messages"
+    },
+    {
+      "m": "Blob",
+      "k": "binary data, file handling, serialization, network packets, cryptography, raw bytes"
+    },
+    {
+      "m": "Int",
+      "k": "always, integers, arithmetic, calculations, counters, indexes, mathematical operations"
+    },
+    {
+      "m": "Int8",
+      "k": "small integers, byte operations, protocol buffers, memory optimization, embedded values"
+    },
+    {
+      "m": "Int16",
+      "k": "short integers, audio samples, graphics, memory-efficient storage"
+    },
+    {
+      "m": "Int32",
+      "k": "standard integers, timestamps, file sizes, general purpose math"
+    },
+    {
+      "m": "Int64",
+      "k": "large integers, timestamps, identifiers, precision arithmetic"
+    },
+    {
+      "m": "Nat",
+      "k": "always, natural numbers, positive integers, counting, array indexes, sizes, unsigned values"
+    },
+    {
+      "m": "Nat8",
+      "k": "bytes, RGB values, small counters, protocol fields, compact storage"
+    },
+    {
+      "m": "Nat16",
+      "k": "port numbers, small identifiers, checksums, compact natural numbers"
+    },
+    {
+      "m": "Nat32",
+      "k": "standard naturals, CRC32, network addresses, general unsigned math"
+    },
+    {
+      "m": "Nat64",
+      "k": "large naturals, file sizes, memory addresses, large identifiers"
+    },
+    {
+      "m": "Float",
+      "k": "decimals, scientific computation, statistics, graphics, physics, percentages, ratios"
+    },
+    {
+      "m": "Option",
+      "k": "always, nullable values, error handling, optional parameters, maybe types, safe null handling"
+    },
+    {
+      "m": "Result",
+      "k": "always, error handling, validation, fallible operations, success/failure, try/catch patterns"
+    },
+    {
+      "m": "Error",
+      "k": "exception handling, error messages, debugging, failure reporting, error propagation"
+    },
+    {
+      "m": "Debug",
+      "k": "logging, tracing, development, testing, print statements, assertions, diagnostics"
+    },
+    {
+      "m": "Func",
+      "k": "higher-order functions, callbacks, function composition, currying, functional patterns"
+    },
+    {
+      "m": "Iter",
+      "k": "iteration, loops, sequences, generators, lazy evaluation, streaming, pagination"
+    },
+    {
+      "m": "Order",
+      "k": "sorting, comparisons, binary search, heap operations, priority queues, ordering"
+    },
+    {
+      "m": "Principal",
+      "k": "authentication, identity, access control, user management, canister ids, security"
+    },
+    {
+      "m": "Cycles",
+      "k": "gas management, canister funding, resource limits, cost tracking, payments"
+    },
+    {
+      "m": "CertifiedData",
+      "k": "certified variables, http outcalls, trusted data, blockchain proof"
+    },
+    {
+      "m": "Region",
+      "k": "stable memory, memory management, persistence, large data, memory regions"
+    },
+    {
+      "m": "Runtime",
+      "k": "system information, canister status, runtime checks, performance monitoring"
+    },
+    {
+      "m": "Time",
+      "k": "timestamps, scheduling, date operations, timeouts, duration calculations, now()"
+    },
+    {
+      "m": "Timer",
+      "k": "periodic tasks, scheduled jobs, heartbeats, cron-like operations, recurring events"
+    },
+    {
+      "m": "Random",
+      "k": "randomness, shuffling, game development, sampling, monte carlo, entropy, uuid generation"
+    },
+    {
+      "m": "ExperimentalCycles",
+      "k": "experimental features, cycles api, advanced cycle management"
+    }
+  ]
+}

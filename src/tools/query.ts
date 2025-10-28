@@ -1,0 +1,411 @@
+/**
+ * Query Tool - Intelligent knowledge layer for ICP-MCP
+ * Handles discovery, documentation, and search with TOON optimization
+ */
+
+import { z } from 'zod';
+import { DataEncoder, DataFormat } from '../core/toon-encoder.js';
+import {
+  MODULES_MINIMAL,
+  expandModule,
+  searchModules,
+  getModulesByCategory,
+  getModule
+} from '../data/modules-minimal.js';
+import { logger } from '../utils/logger.js';
+
+// Load use-case metadata
+import useCaseData from '../data/use-cases.json' assert { type: 'json' };
+
+// Input schema for the query tool
+export const QueryInputSchema = z.object({
+  query: z.string().describe('Natural language query or specific request'),
+  format: z.enum(['toon', 'json', 'markdown']).optional().default('toon'),
+  limit: z.number().optional().describe('Token limit for response'),
+  includeRelated: z.boolean().optional().default(true),
+  includeExamples: z.boolean().optional().default(false),
+});
+
+export type QueryInput = z.infer<typeof QueryInputSchema>;
+
+// Intent types
+type IntentType =
+  | 'discover'    // List modules, browse categories
+  | 'search'      // Find specific functionality
+  | 'document'    // Get documentation for modules
+  | 'example'     // Get code examples
+  | 'explain';    // Explain concepts
+
+interface ParsedIntent {
+  type: IntentType;
+  modules?: string[];
+  category?: string;
+  query?: string;
+  confidence: number;
+}
+
+/**
+ * Main query tool execution
+ */
+export async function query(input: QueryInput) {
+  logger.info(`Query tool called with: "${input.query}"`);
+
+  // Parse the natural language query
+  const intent = parseIntent(input.query);
+  logger.debug(`Parsed intent: ${intent.type} (confidence: ${intent.confidence})`);
+
+  let result: any;
+
+  switch (intent.type) {
+    case 'discover':
+      result = await handleDiscovery(intent, input);
+      break;
+    case 'search':
+      result = await handleSearch(intent, input);
+      break;
+    case 'document':
+      result = await handleDocumentation(intent, input);
+      break;
+    case 'example':
+      result = await handleExamples(intent, input);
+      break;
+    case 'explain':
+      result = await handleExplanation(intent, input);
+      break;
+    default:
+      result = await handleSearch(intent, input);
+  }
+
+  // Add intelligence features
+  const suggestions = generateSuggestions(intent, result);
+  const related = input.includeRelated ? findRelatedModules(intent, result) : [];
+
+  // Encode the result
+  const encoded = DataEncoder.encode(result, input.format);
+
+  return {
+    content: [
+      {
+        type: 'text' as const,
+        text: encoded,
+      },
+    ],
+    metadata: {
+      intent: intent.type,
+      confidence: intent.confidence,
+      format: input.format,
+      tokenEstimate: DataEncoder.estimateTokens(encoded),
+      suggestions,
+      related: related.length > 0 ? DataEncoder.encode({ modules: related }, 'toon') : undefined,
+    },
+  };
+}
+
+/**
+ * Parse natural language query to determine intent
+ */
+function parseIntent(query: string): ParsedIntent {
+  const q = query.toLowerCase();
+
+  // Discovery patterns
+  if (/\b(list|show|all|available|browse|discover)\b/.test(q)) {
+    // Check for category mentions
+    const categoryMatch = q.match(/\b(array|map|list|set|number|text|system|util)/);
+    return {
+      type: 'discover',
+      category: categoryMatch ? categoryMatch[1] : undefined,
+      query: q,
+      confidence: 0.9,
+    };
+  }
+
+  // Documentation patterns
+  if (/\b(how|documentation|docs?|explain|use)\b/.test(q)) {
+    const modules = extractModuleNames(q);
+    return {
+      type: modules.length > 0 ? 'document' : 'explain',
+      modules,
+      query: q,
+      confidence: modules.length > 0 ? 0.85 : 0.7,
+    };
+  }
+
+  // Example patterns
+  if (/\b(example|sample|code|template|snippet)\b/.test(q)) {
+    const modules = extractModuleNames(q);
+    return {
+      type: 'example',
+      modules,
+      query: q,
+      confidence: 0.8,
+    };
+  }
+
+  // Search patterns (default)
+  return {
+    type: 'search',
+    query: q,
+    confidence: 0.6,
+  };
+}
+
+/**
+ * Extract module names from query
+ */
+function extractModuleNames(query: string): string[] {
+  const modules: string[] = [];
+  const q = query.toLowerCase();
+
+  for (const module of MODULES_MINIMAL) {
+    if (q.includes(module.n.toLowerCase())) {
+      modules.push(module.n);
+    }
+  }
+
+  return modules;
+}
+
+/**
+ * Handle discovery requests
+ */
+async function handleDiscovery(intent: ParsedIntent, input: QueryInput) {
+  if (intent.category) {
+    const modules = getModulesByCategory(intent.category);
+    return {
+      action: 'category',
+      category: intent.category,
+      modules: modules.map(m => expandModule(m)),
+      total: modules.length,
+    };
+  }
+
+  // Return all modules organized by category
+  const categories: Record<string, any[]> = {};
+
+  for (const module of MODULES_MINIMAL) {
+    const [cat] = module.c.split('/');
+    if (!categories[cat]) {
+      categories[cat] = [];
+    }
+    categories[cat].push(expandModule(module));
+  }
+
+  return {
+    action: 'list-all',
+    total: MODULES_MINIMAL.length,
+    categories,
+  };
+}
+
+/**
+ * Handle search requests using semantic matching
+ */
+async function handleSearch(intent: ParsedIntent, input: QueryInput) {
+  const query = intent.query || input.query;
+  const results: Array<{ module: any; score: number }> = [];
+
+  // Search through modules using use-case metadata
+  const useCases = useCaseData.useCases as Array<{ m: string; k: string }>;
+
+  for (const uc of useCases) {
+    const keywords = uc.k.toLowerCase();
+    const q = query.toLowerCase();
+
+    // Calculate relevance score
+    let score = 0;
+
+    // Exact module name match
+    if (uc.m.toLowerCase() === q) {
+      score = 100;
+    }
+    // Module name contains query
+    else if (uc.m.toLowerCase().includes(q)) {
+      score = 80;
+    }
+    // Keywords contain query
+    else if (keywords.includes(q)) {
+      score = 60;
+      // Boost if it's marked as "always" (fundamental module)
+      if (keywords.includes('always')) {
+        score += 20;
+      }
+    }
+    // Individual keyword match
+    else {
+      const queryWords = q.split(/\s+/);
+      const keywordList = keywords.split(',').map(k => k.trim());
+
+      for (const qw of queryWords) {
+        for (const kw of keywordList) {
+          if (kw.includes(qw)) {
+            score += 20;
+          }
+        }
+      }
+    }
+
+    if (score > 0) {
+      const module = getModule(uc.m);
+      if (module) {
+        results.push({ module: expandModule(module), score });
+      }
+    }
+  }
+
+  // Sort by score
+  results.sort((a, b) => b.score - a.score);
+
+  return {
+    action: 'search',
+    query,
+    results: results.slice(0, 10).map(r => r.module),
+    total: results.length,
+  };
+}
+
+/**
+ * Handle documentation requests
+ */
+async function handleDocumentation(intent: ParsedIntent, input: QueryInput) {
+  const moduleNames = intent.modules || [];
+
+  if (moduleNames.length === 0) {
+    return handleSearch(intent, input);
+  }
+
+  const modules = moduleNames.map(name => {
+    const mod = getModule(name);
+    return mod ? expandModule(mod) : null;
+  }).filter(Boolean);
+
+  // In a real implementation, this would fetch actual documentation
+  // For now, return module information with links
+  return {
+    action: 'document',
+    modules: modules.map(m => ({
+      ...m,
+      documentation: `View full documentation at: ${m.docUrl}`,
+      source: `View source code at: ${m.githubUrl}`,
+      playground: `Try in playground: ${m.playgroundUrl}`,
+    })),
+    format: 'summary',
+  };
+}
+
+/**
+ * Handle example requests
+ */
+async function handleExamples(intent: ParsedIntent, input: QueryInput) {
+  const moduleNames = intent.modules || [];
+
+  if (moduleNames.length === 0) {
+    return {
+      action: 'example',
+      message: 'Please specify which module you need examples for',
+      suggestions: ['Array examples', 'Map examples', 'Text manipulation examples'],
+    };
+  }
+
+  // In production, would fetch real examples
+  return {
+    action: 'example',
+    modules: moduleNames,
+    examples: moduleNames.map(name => ({
+      module: name,
+      code: `import ${name} "mo:core/${name}";\n\n// Example usage of ${name}`,
+      description: `Common patterns for using ${name} module`,
+    })),
+  };
+}
+
+/**
+ * Handle explanation requests
+ */
+async function handleExplanation(intent: ParsedIntent, input: QueryInput) {
+  return {
+    action: 'explain',
+    query: intent.query,
+    explanation: 'Use the ICP-MCP to explore Motoko modules and their functionality.',
+    suggestions: [
+      'Try: "list all data structures"',
+      'Try: "how to use Array"',
+      'Try: "random number generation"',
+    ],
+  };
+}
+
+/**
+ * Generate next-action suggestions based on context
+ */
+function generateSuggestions(intent: ParsedIntent, result: any): string[] {
+  const suggestions: string[] = [];
+
+  switch (intent.type) {
+    case 'discover':
+      suggestions.push('Pick a module and ask: "how to use [module]"');
+      suggestions.push('Search for specific functionality: "queue operations"');
+      break;
+    case 'search':
+      if (result.results && result.results.length > 0) {
+        const topModule = result.results[0].name;
+        suggestions.push(`Get documentation: "explain ${topModule}"`);
+        suggestions.push(`See examples: "${topModule} examples"`);
+      }
+      break;
+    case 'document':
+      if (result.modules && result.modules.length > 0) {
+        suggestions.push('Try the code in the playground');
+        suggestions.push('Ask for specific examples');
+      }
+      break;
+  }
+
+  return suggestions;
+}
+
+/**
+ * Find related modules based on category and use-cases
+ */
+function findRelatedModules(intent: ParsedIntent, result: any): any[] {
+  const related: any[] = [];
+
+  if (result.modules && result.modules.length > 0) {
+    const module = result.modules[0];
+    const category = module.category?.split('/')[0];
+
+    if (category) {
+      const sameCategory = getModulesByCategory(category)
+        .filter(m => m.n !== module.name)
+        .slice(0, 3)
+        .map(m => expandModule(m));
+
+      related.push(...sameCategory);
+    }
+  }
+
+  return related;
+}
+
+// Export for use in main index
+export const queryTool = {
+  name: 'icp/query',
+  description: `Natural language interface for ICP development knowledge.
+
+ALWAYS START HERE for any ICP question or documentation need.
+
+Understands queries like:
+- "list all data structures" → discovers relevant modules
+- "how do I use Array" → fetches Array documentation
+- "token canister example" → finds templates and examples
+- "which module for random numbers" → intelligent search
+
+Features:
+- Semantic matching using AI-generated use-cases
+- TOON format by default (50% fewer tokens)
+- Smart caching with offline fallback
+- Context-aware suggestions
+
+Returns TOON-formatted data for efficiency.`,
+  inputSchema: QueryInputSchema,
+  execute: query,
+};

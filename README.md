@@ -1,202 +1,195 @@
 # IC-MCP
 
-MCP server for ICP that gives Claude Code, Cursor, and Codex real-time validation and documentation.
+MCP server for Internet Computer development that provides real-time validation, documentation, and testing tools to Claude, Cursor, and other AI assistants.
 
-## Install
+## Quick Install
 
 ```bash
-# Claude Code users - just run this:
-claude mcp add --scope user --transport stdio ic-mcp -- npx -y ic-mcp
-```
+# For Claude Desktop
+npx @claudeai/mcp add ic-mcp
 
-For Cursor/Codex setup or if you need the compilers, see [Full Setup](#full-setup).
+# Or manual install
+npm install -g ic-mcp
+```
 
 ## What It Does
 
-Ask your AI assistant to:
+IC-MCP gives your AI assistant deep knowledge of Internet Computer development:
 
-```bash
-# Validate code as you write
-"Check this Motoko code: [paste code]"
+- **Explore Motoko modules** - "What data structures are available in Motoko?"
+- **Write validated code** - "Create a token canister with transfer function"
+- **Test locally** - "Deploy this and call the transfer method"
+- **Optimize performance** - "Why is this canister using so many cycles?"
+- **Check upgrade safety** - "Will this upgrade break existing clients?"
 
-# Get working examples
-"Show me a token canister example"
+## Example Conversations
 
-# Deploy and test
-"Deploy this project locally"
-"Call the transfer method with (principal 'xxx', 100)"
+### Building a DEX
 
-# Analyze projects
-"What's the dependency order for these canisters?"
+```
+You: "Create a swap canister for token trading"
+AI: [Generates complete Motoko canister with atomic swaps, validates with compiler]
 
-# Optimize performance
-"Find memory leaks in this canister"
+You: "Deploy it and test a swap"
+AI: [Deploys locally, executes test swap, shows results]
+
+You: "Add liquidity pool management"
+AI: [Extends canister, validates compatibility, tests new methods]
 ```
 
-## Example Workflows
+### Debugging Performance
 
-```bash
-# Build a DEX canister with validation
-"Create a swap canister with atomic transactions"  # Generates Motoko, validates with moc
-"Deploy and test a swap"                          # Deploys locally, executes test swap
+```
+You: "This canister is slow, help me optimize it"
+AI: [Analyzes code, finds unbounded loops and large stable variables]
 
-# Debug performance issues
-"Why is this canister using so many cycles?"      # Finds unbounded loops, large stable vars
-"Refactor for better performance"                 # Applies optimizations, pagination
-
-# Safe upgrades
-"Check if this upgrade breaks clients"            # Compares Candid interfaces
-"Add backward compatibility"                      # Generates compatibility layer
+You: "Fix the performance issues"
+AI: [Refactors with pagination, optimized data structures, shows cycle savings]
 ```
 
-## Full Setup
+### Learning Motoko
 
-### Prerequisites
+```
+You: "How do I work with arrays in Motoko?"
+AI: [Shows Array and VarArray modules, explains differences, provides examples]
 
-IC-MCP validates code using real compilers. You'll need these installed:
+You: "Show me the difference between Map and pure/Map"
+AI: [Compares mutable vs immutable, with performance tradeoffs and use cases]
+```
+
+## Core Capabilities
+
+### Module Discovery
+- Browse all 45+ Motoko standard library modules
+- Search by functionality ("find all queue implementations")
+- Get documentation with examples and complexity analysis
+
+### Code Generation
+- Production-ready canister templates
+- Official DFINITY examples
+- Best practices and security patterns built-in
+
+### Validation & Testing
+- Real-time Motoko and Rust validation
+- Candid interface checking
+- Local deployment and method testing
+- Multi-step scenario testing
+
+### Optimization
+- Performance bottleneck detection
+- Cycle cost analysis
+- Memory usage optimization
+- Automated refactoring suggestions
+
+### Deployment Safety
+- Upgrade compatibility checking
+- Breaking change detection
+- Safe dfx command generation
+
+## Prerequisites
+
+For full functionality, install the IC development tools:
 
 ```bash
-# 1. Rust (for Candid compiler)
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-
-# 2. dfx (for Motoko compiler)
+# Install DFX (includes Motoko compiler)
 sh -ci "$(curl -fsSL https://internetcomputer.org/install.sh)"
 
-# 3. didc (Candid validator)
-cargo install --git https://github.com/dfinity/candid.git didc
-
-# Verify
-dfx --version && didc --version
+# Verify installation
+dfx --version
 ```
 
-### Add to Your Editor
+## Configuration
 
-**Claude Code:**
-```bash
-claude mcp add --scope user --transport stdio ic-mcp -- npx -y ic-mcp
-```
+### Claude Desktop
 
-**Other Editors (Cursor, Codex, etc):**
+Add to your Claude configuration:
+
 ```json
-// Add to your editor's MCP config:
 {
   "mcpServers": {
-    "icp": {
-      "command": "ic-mcp"
+    "ic-mcp": {
+      "command": "npx",
+      "args": ["ic-mcp"]
     }
   }
 }
 ```
 
-Restart your editor after configuration.
+### Cursor/Other Editors
 
-### Optional: GitHub Token
-
-For fetching docs and examples without rate limits:
-
-```bash
-export GITHUB_TOKEN=ghp_xxxxxxxxxxxxx
+```json
+{
+  "mcpServers": {
+    "ic-mcp": {
+      "command": "ic-mcp",
+      "args": [],
+      "env": {
+        "PATH": "/usr/local/bin:/usr/bin"
+      }
+    }
+  }
+}
 ```
 
-Get one at https://github.com/settings/tokens (needs `public_repo` scope).
+## Practical Examples
 
-## Tools
+### Start a New Project
 
-### Core Development
-
-| Tool | Purpose | Example Use |
-|------|---------|-------------|
-| `icp/validate` | Validate Candid, Motoko, Rust, dfx.json | Iterative development with instant feedback |
-| `icp/analyze-project` | Analyze multi-canister projects | Understand dependencies, build order, validate all canisters |
-| `icp/get-docs` | Fetch internetcomputer.org documentation | Get current docs without leaving your editor |
-| `icp/get-example` | Fetch working examples from dfinity/examples | See real implementations of patterns |
-| `icp/template` | Generate canister boilerplate | Scaffold new Motoko/Rust canisters with best practices |
-
-### Testing & Deployment
-
-| Tool | Purpose | Example Use |
-|------|---------|-------------|
-| `icp/test-deploy` | Deploy to local/playground networks | Test multi-canister deployments with dependency ordering |
-| `icp/test-call` | Execute canister methods | Call and test canister functions with Candid encoding |
-| `icp/test-scenario` | Multi-step test orchestration | Run complex test flows with state validation |
-| `icp/dfx-guide` | Generate safe dfx commands | Get command templates with safety checks |
-
-### Quality & Optimization
-
-| Tool | Purpose | Example Use |
-|------|---------|-------------|
-| `icp/check-upgrade` | Validate upgrade compatibility | Detect breaking Candid interface changes |
-| `icp/refactor` | Apply ICP-specific transformations | Add upgrade hooks, stable vars, caller checks |
-| `icp/speed` | Performance analysis | Find memory, cycle, and latency bottlenecks |
-
-### Motoko Documentation
-
-| Tool | Purpose | Example Use |
-|------|---------|-------------|
-| `icp/motoko-core` | Instant docs for Motoko core library | Query Array, Map, List module methods and examples |
-| `icp/base-to-core-migration` | Migration guide from base to core | Find replacements for deprecated base library imports |
-
-
-## Features
-
-- **Live validation**: Real compilers (moc/didc), not regex patterns
-- **Multi-canister analysis**: Dependency graphs, build order, circular reference detection
-- **Performance analysis**: Memory usage, cycle costs, latency bottlenecks
-- **Upgrade safety**: Candid interface compatibility checking
-- **Caching**: Content-based caching for 10-100x speedup on repeated validations
-- **HTTPS outcalls**: Transform function detection, URL length limits, cycle management
-- **Security patterns**: Caller validation, trap safety, overflow checks
-
-
-## Known Limitations
-
-**Canister imports in standalone validation:**
-
-Code with `canister:` imports cannot be validated in isolation with `icp/validate`:
-
-```motoko
-import Token "canister:token";  // Requires project context
+```
+"Create a social media canister with posts and comments"
+"Add user authentication with Internet Identity"
+"Deploy and test the post creation"
 ```
 
-**Workaround:** Use `icp/analyze-project` which resolves canister dependencies from dfx.json and validates all canisters with proper import context.
+### Migrate Legacy Code
 
-**Standard library imports work normally:**
-```motoko
-import Map "mo:core/Map";  // Works in icp/validate
+```
+"I have old code using base library, help me migrate"
+"Update HashMap to the new Map module"
+"Check if my upgrade is safe"
 ```
 
-## Development
+### Optimize Existing Canisters
 
-```bash
-git clone https://github.com/swissyai/icp-mcp.git
-cd icp-mcp
-npm install
-npm test
-npm run build
+```
+"Analyze my canister for performance issues"
+"Find memory leaks in stable variables"
+"Reduce cycle consumption"
 ```
 
-## Roadmap
+## Available Tools
 
-**v0.8.0 (Current)**
-- Migrated to Motoko core library
-- Full validation diagnostics with fix suggestions
-- HTTPS outcalls validation
-- Content-based caching
-- Parallel multi-canister validation
+The AI assistant has access to these specialized tools:
 
-**Next**
-- Auto-fix for common errors
-- CI/CD integration
-- Additional language support
+- **icp/discover** - Find and explore Motoko modules
+- **icp/motoko-core** - Get detailed module documentation
+- **icp/validate** - Check code for errors
+- **icp/template** - Generate project scaffolding
+- **icp/test-deploy** - Deploy canisters locally
+- **icp/test-call** - Execute canister methods
+- **icp/speed** - Analyze performance
+- **icp/check-upgrade** - Validate upgrade safety
+
+## Troubleshooting
+
+### "Module not found"
+The tool will suggest corrections for typos and point you to similar modules.
+
+### "Validation failed"
+Make sure DFX is installed: `dfx --version`
+
+### "Deployment error"
+Check that local replica is running: `dfx start --clean`
+
+## Author
+
+Created by [@swissyai](https://x.com/swissyai)
+
+## Support
+
+- Issues: [github.com/swissyai/ic-mcp/issues](https://github.com/swissyai/ic-mcp/issues)
+- Documentation: [internetcomputer.org/docs](https://internetcomputer.org/docs)
 
 ## License
 
 MIT
-
-## Contributing
-
-Issues and pull requests welcome at https://github.com/swissyai/icp-mcp
-
-## Author
-
-[@swissyai](https://x.com/swissyai)
