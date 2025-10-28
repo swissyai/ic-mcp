@@ -4,18 +4,24 @@
  */
 
 import { z } from 'zod';
-import { DataEncoder, DataFormat } from '../core/toon-encoder.js';
+import { DataEncoder } from '../core/toon-encoder.js';
 import {
   MODULES_MINIMAL,
   expandModule,
-  searchModules,
   getModulesByCategory,
   getModule
 } from '../data/modules-minimal.js';
 import { logger } from '../utils/logger.js';
+import { readFileSync } from 'fs';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
 
 // Load use-case metadata
-import useCaseData from '../data/use-cases.json' assert { type: 'json' };
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const useCaseData = JSON.parse(
+  readFileSync(join(__dirname, '../data/use-cases.json'), 'utf-8')
+);
 
 // Input schema for the query tool
 export const QueryInputSchema = z.object({
@@ -48,10 +54,42 @@ interface ParsedIntent {
  * Main query tool execution
  */
 export async function query(input: QueryInput) {
-  logger.info(`Query tool called with: "${input.query}"`);
+  const trimmed = input.query.trim();
+
+  // Empty query = show quick overview / getting started guide
+  if (trimmed.length === 0) {
+    return {
+      content: [{
+        type: 'text' as const,
+        text: `# Welcome to IC-MCP!
+
+## Three Tools for ICP Development
+
+**icp/query** - Discover and learn about ICP modules
+  Example: "list all data structures"
+  Example: "how to use the Array module"
+
+**icp/action** - Validate, test, and deploy code
+  Example: "validate my Motoko code"
+  Example: "deploy to local network"
+
+**icp/help** - Detailed guidance and examples
+  Use: icp/help with section: "overview", "query", "action", or "examples"
+
+## Quick Start
+Try: "list all ICP modules" to see what's available
+Or: "how do I use Map" to learn about a specific module
+
+## Full Capabilities
+Use: icp/help { section: "examples" } for real-world workflows`
+      }]
+    };
+  }
+
+  logger.info(`Query tool called with: "${trimmed}"`);
 
   // Parse the natural language query
-  const intent = parseIntent(input.query);
+  const intent = parseIntent(trimmed);
   logger.debug(`Parsed intent: ${intent.type} (confidence: ${intent.confidence})`);
 
   let result: any;
@@ -109,8 +147,18 @@ function parseIntent(query: string): ParsedIntent {
 
   // Discovery patterns
   if (/\b(list|show|all|available|browse|discover)\b/.test(q)) {
-    // Check for category mentions
-    const categoryMatch = q.match(/\b(array|map|list|set|number|text|system|util)/);
+    // Check if it's a "list all" or "show all" pattern (no specific category)
+    if (/\b(list|show)\s+(all|everything)\b/.test(q)) {
+      return {
+        type: 'discover',
+        category: undefined,
+        query: q,
+        confidence: 0.9,
+      };
+    }
+
+    // Check for category mentions (but not "list" itself since it's ambiguous)
+    const categoryMatch = q.match(/\b(array|map|set|number|text|system|util|buffer|iter|option|result)/);
     return {
       type: 'discover',
       category: categoryMatch ? categoryMatch[1] : undefined,
@@ -168,7 +216,7 @@ function extractModuleNames(query: string): string[] {
 /**
  * Handle discovery requests
  */
-async function handleDiscovery(intent: ParsedIntent, input: QueryInput) {
+async function handleDiscovery(intent: ParsedIntent, _input: QueryInput) {
   if (intent.category) {
     const modules = getModulesByCategory(intent.category);
     return {
@@ -278,24 +326,77 @@ async function handleDocumentation(intent: ParsedIntent, input: QueryInput) {
     return mod ? expandModule(mod) : null;
   }).filter(Boolean);
 
-  // In a real implementation, this would fetch actual documentation
-  // For now, return module information with links
-  return {
-    action: 'document',
-    modules: modules.map(m => ({
-      ...m,
-      documentation: `View full documentation at: ${m.docUrl}`,
-      source: `View source code at: ${m.githubUrl}`,
-      playground: `Try in playground: ${m.playgroundUrl}`,
-    })),
-    format: 'summary',
-  };
+  // Fetch actual documentation content from URLs
+  try {
+    const fetch = (await import('node-fetch')).default;
+    const { default: TurndownService } = await import('turndown');
+
+    const docsWithContent = await Promise.all(
+      modules.map(async (m: any) => {
+        try {
+          logger.debug(`Fetching docs from: ${m.docUrl}`);
+          const response = await fetch(m.docUrl, {
+            headers: { 'User-Agent': 'ic-mcp/0.9.0' },
+            signal: AbortSignal.timeout(5000)
+          });
+
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+          }
+
+          const html = await response.text();
+
+          // Convert HTML to markdown
+          const turndown = new TurndownService({
+            headingStyle: 'atx',
+            codeBlockStyle: 'fenced',
+          });
+          const markdown = turndown.turndown(html);
+
+          // Extract main content (remove nav, footer, etc)
+          const contentMatch = markdown.match(/# [\s\S]*?(?=\n##|$)/);
+          const cleanContent = contentMatch ? contentMatch[0] : markdown.slice(0, 2000);
+
+          return {
+            ...m,
+            content: cleanContent.slice(0, 3000), // Limit to 3000 chars per module
+            source: `Full docs: ${m.docUrl}`,
+          };
+        } catch (error: any) {
+          logger.warn(`Failed to fetch ${m.name} docs: ${error.message}`);
+          return {
+            ...m,
+            content: `Documentation unavailable. View at: ${m.docUrl}`,
+            source: m.docUrl,
+          };
+        }
+      })
+    );
+
+    return {
+      action: 'document',
+      modules: docsWithContent,
+      format: 'detailed',
+    };
+  } catch (error: any) {
+    logger.error('Documentation fetch error:', error);
+    // Fallback to URLs only
+    return {
+      action: 'document',
+      modules: modules.map(m => ({
+        ...m,
+        content: `View full documentation at: ${m.docUrl}`,
+        source: m.githubUrl,
+      })),
+      format: 'summary',
+    };
+  }
 }
 
 /**
  * Handle example requests
  */
-async function handleExamples(intent: ParsedIntent, input: QueryInput) {
+async function handleExamples(intent: ParsedIntent, _input: QueryInput) {
   const moduleNames = intent.modules || [];
 
   if (moduleNames.length === 0) {
@@ -321,7 +422,7 @@ async function handleExamples(intent: ParsedIntent, input: QueryInput) {
 /**
  * Handle explanation requests
  */
-async function handleExplanation(intent: ParsedIntent, input: QueryInput) {
+async function handleExplanation(intent: ParsedIntent, _input: QueryInput) {
   return {
     action: 'explain',
     query: intent.query,
@@ -366,7 +467,7 @@ function generateSuggestions(intent: ParsedIntent, result: any): string[] {
 /**
  * Find related modules based on category and use-cases
  */
-function findRelatedModules(intent: ParsedIntent, result: any): any[] {
+function findRelatedModules(_intent: ParsedIntent, result: any): any[] {
   const related: any[] = [];
 
   if (result.modules && result.modules.length > 0) {

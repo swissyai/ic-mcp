@@ -18,7 +18,7 @@ export class DataEncoder {
       try {
         return toTOON(data, {
           indent: 2,
-          lengthMarker: true,  // Helps LLM validate structure
+          lengthMarker: "#",  // Helps LLM validate structure
         });
       } catch (error) {
         logger.warn('TOON encoding failed, falling back to JSON:', error);
@@ -39,7 +39,7 @@ export class DataEncoder {
     // Default to TOON if possible, otherwise JSON
     if (this.isTOONCompatible(data)) {
       try {
-        return toTOON(data, { indent: 2, lengthMarker: true });
+        return toTOON(data, { indent: 2, lengthMarker: "#" });
       } catch {
         return JSON.stringify(data, null, 2);
       }

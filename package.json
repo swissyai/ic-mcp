@@ -1,7 +1,7 @@
 {
   "name": "ic-mcp",
-  "version": "0.8.2",
-  "description": "Model Context Protocol server for Internet Computer development",
+  "version": "0.9.0",
+  "description": "Model Context Protocol server for Internet Computer development with natural language tools and TOON encoding",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -27,16 +27,21 @@
     "rust",
     "candid",
     "dfinity",
-    "model-context-protocol"
+    "model-context-protocol",
+    "toon",
+    "natural-language",
+    "ai-agent",
+    "claude-code"
   ],
   "author": "swissyai (https://x.com/swissyai)",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/swissyai/icp-mcp.git"
+    "url": "git+https://github.com/swissyai/ic-mcp.git"
   },
   "devDependencies": {
     "@types/node": "^24.9.1",
+    "@types/turndown": "^5.0.6",
     "@vitest/ui": "^4.0.2",
     "gpt-tokenizer": "^3.2.0",
     "tsx": "^4.20.6",
