@@ -1,95 +1,94 @@
 # IC-MCP
 
-MCP server that gives Claude Code, Cursor, and Codex real-time ICP validation and documentation.
-
-## Quick Start (Claude Code CLI)
-
-Add IC-MCP to Claude Code in one command:
-
-```bash
-# Project-specific (current project only)
-claude mcp add --transport stdio ic-mcp -- npx -y ic-mcp
-
-# Global (all projects)
-claude mcp add --scope user --transport stdio ic-mcp -- npx -y ic-mcp
-```
-
-That's it! IC-MCP is now available in Claude Code. Skip to [Usage](#usage) to start using it.
-
----
-
-Uses actual Motoko and Candid compilers (moc/didc) for production-grade validation, not pattern matching approximations.
-
-**Context Usage:** ~3k tokens (adds 14 specialized ICP development tools to your AI assistant)
+Real-time ICP validation in your AI assistant using actual Motoko and Candid compilers.
 
 ## Install
 
+```bash
+# Claude Code users - just run this:
+claude mcp add --scope user --transport stdio ic-mcp -- npx -y ic-mcp
+```
+
+For Cursor/Codex setup or if you need the compilers, see [Full Setup](#full-setup).
+
+## What It Does
+
+Ask your AI assistant to:
+
+```bash
+# Validate code as you write
+"Check this Motoko code: [paste code]"
+
+# Get working examples
+"Show me a token canister example"
+
+# Deploy and test
+"Deploy this project locally"
+"Call the transfer method with (principal 'xxx', 100)"
+
+# Analyze projects
+"What's the dependency order for these canisters?"
+
+# Optimize performance
+"Find memory leaks in this canister"
+```
+
+## Examples
+
+**Building a DEX:**
+```
+You: "Create a swap canister with atomic transactions"
+AI: Generates Motoko with stable vars, validates with moc compiler
+You: "Deploy and test a swap"
+AI: Deploys locally, calls swap method, shows results
+```
+
+**Debugging production issues:**
+```
+You: "Why is this canister using so many cycles?"
+AI: Analyzes code, finds unbounded loops and large stable vars
+You: "How do I fix it?"
+AI: Shows refactored code with pagination and efficient data structures
+```
+
+**Upgrading safely:**
+```
+You: "Will this upgrade break existing clients?"
+AI: Compares Candid interfaces, finds removed methods
+You: "Add backward compatibility"
+AI: Adds deprecated methods that proxy to new implementation
+```
+
+## Full Setup
+
 ### Prerequisites
 
-**Rust** (required for didc):
+IC-MCP validates code using real compilers. You'll need these installed:
+
 ```bash
+# 1. Rust (for Candid compiler)
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-```
 
-**dfx** (provides moc compiler):
-```bash
+# 2. dfx (for Motoko compiler)
 sh -ci "$(curl -fsSL https://internetcomputer.org/install.sh)"
-```
 
-**didc** (Candid validation):
-```bash
+# 3. didc (Candid validator)
 cargo install --git https://github.com/dfinity/candid.git didc
+
+# Verify
+dfx --version && didc --version
 ```
 
-**Verify:**
+### Add to Your Editor
+
+**Claude Code:**
 ```bash
-dfx --version
-didc --version
-```
-
-### Install IC-MCP
-
-```bash
-npm install -g ic-mcp
-```
-
-### Configure Your AI Assistant
-
-**Claude Code (CLI):**
-
-Use the built-in MCP manager:
-```bash
-# Add globally (recommended - available in all projects)
 claude mcp add --scope user --transport stdio ic-mcp -- npx -y ic-mcp
-
-# Or add to current project only
-claude mcp add --transport stdio ic-mcp -- npx -y ic-mcp
-
-# Verify connection
-claude mcp list
-```
-
-**Claude Desktop App:**
-
-Configuration file location (create if it doesn't exist):
-- macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
-- Windows: `%APPDATA%\Claude\claude_desktop_config.json`
-- Linux: `~/.config/Claude/claude_desktop_config.json`
-
-```json
-{
-  "mcpServers": {
-    "icp": {
-      "command": "ic-mcp"
-    }
-  }
-}
 ```
 
 **Cursor:**
-
-Create `.cursor/mcp.json` in your project root:
 ```json
+// .cursor/mcp.json in project root
 {
   "mcpServers": {
     "icp": {
@@ -99,23 +98,30 @@ Create `.cursor/mcp.json` in your project root:
 }
 ```
 
-**Codex:**
+**Claude Desktop:**
+```json
+// ~/Library/Application Support/Claude/claude_desktop_config.json (macOS)
+// %APPDATA%\Claude\claude_desktop_config.json (Windows)
+{
+  "mcpServers": {
+    "icp": {
+      "command": "ic-mcp"
+    }
+  }
+}
+```
 
-Similar configuration to Cursor. Check Codex documentation for MCP config path.
+Restart your editor after configuration.
 
-**After configuration:** Restart your AI assistant.
+### Optional: GitHub Token
 
-### Recommended: GitHub Token
-
-Documentation and example fetching uses GitHub API. Rate limits:
-- **Without token:** 60 requests/hour (quickly exhausted with doc browsing)
-- **With token:** 5000 requests/hour
+For fetching docs and examples without rate limits:
 
 ```bash
 export GITHUB_TOKEN=ghp_xxxxxxxxxxxxx
 ```
 
-Generate token at https://github.com/settings/tokens (requires `public_repo` scope)
+Get one at https://github.com/settings/tokens (needs `public_repo` scope).
 
 ## Tools
 
@@ -146,99 +152,69 @@ Generate token at https://github.com/settings/tokens (requires `public_repo` sco
 | `icp/refactor` | Apply ICP-specific transformations | Add upgrade hooks, stable vars, caller checks |
 | `icp/speed` | Performance analysis | Find memory, cycle, and latency bottlenecks |
 
-## Usage
+## Workflows
 
-### Development Flow
+### Build → Validate → Deploy → Test
 
-```
-1. Start new canister
-   → Ask: "Create a Motoko canister with stable storage and upgrade hooks"
-   → Tool: icp/template
+```bash
+# 1. Generate boilerplate
+"Create a Motoko token canister with stable storage"
 
-2. Write code iteratively
-   → Ask: "Validate this code" (paste your Motoko/Rust/Candid)
-   → Tool: icp/validate
-   → Get: Compiler errors, security warnings, fix suggestions
+# 2. Validate as you write
+"Check this code: [paste code]"
+# → Get exact compiler errors with line numbers
 
-3. Analyze project structure
-   → Ask: "Analyze this ICP project"
-   → Tool: icp/analyze-project
-   → Get: Dependencies, build order, canister details
+# 3. Deploy locally
+"Deploy this project"
+# → Returns canister IDs
 
-4. Need examples or docs
-   → Ask: "Show me HTTPS outcalls examples"
-   → Tools: icp/get-example, icp/get-docs
-   → Get: Working code and official documentation
-
-5. Test locally
-   → Ask: "Deploy this to local network and test the transfer function"
-   → Tools: icp/test-deploy → icp/test-call
-   → Get: Deployed canister IDs, test results
-
-6. Optimize before mainnet
-   → Ask: "Check performance and validate upgrade safety"
-   → Tools: icp/speed, icp/check-upgrade
-   → Get: Performance score, upgrade compatibility report
+# 4. Test methods
+"Call transfer with (principal 'xxx', 100)"
+# → See decoded results
 ```
 
-### Example Interactions
+### Debug Existing Projects
 
-**Validate code:**
-```
-You: "Validate this Motoko code: actor { public func greet() : async Text { 'Hello' } }"
-Assistant: Uses icp/validate
-Returns: Type error at line 1 - Text literals use double quotes, with fix suggestion
+```bash
+# Understand structure
+"Analyze this ICP project"
+# → Dependency graph, build order, line counts
+
+# Check for issues
+"Validate all canisters"
+# → Compiler errors across entire project
+
+# Performance analysis
+"Find bottlenecks in this canister"
+# → Memory leaks, cycle waste, slow operations
 ```
 
-**Multi-canister analysis:**
-```
-You: "Analyze this project and show me the build order"
-Assistant: Uses icp/analyze-project
-Returns: Canister list, dependency graph, topological build order, validation results
-```
+### Production Checklist
 
-**Get current docs:**
-```
-You: "How do HTTPS outcalls work on ICP?"
-Assistant: Uses icp/get-docs
-Returns: Latest documentation from internetcomputer.org
+```bash
+# Before upgrading
+"Check if this interface breaks existing clients"
+# → Candid compatibility report
+
+# Security audit
+"Add caller validation to public methods"
+# → Automatic refactoring
+
+# Performance optimization
+"Analyze cycle usage"
+# → Ranked list of expensive operations
 ```
 
 ## Features
 
-**Live Validation:**
-- Candid: `didc check` (full compiler validation)
-- Motoko: `moc` compiler with type-checking (via dfx cache)
-- Rust: Pattern-based ic-cdk validation + security checks
-- dfx.json: Schema validation + circular dependency detection
+- **Live validation**: Real compilers (moc/didc), not regex patterns
+- **Multi-canister analysis**: Dependency graphs, build order, circular reference detection
+- **Performance analysis**: Memory usage, cycle costs, latency bottlenecks
+- **Upgrade safety**: Candid interface compatibility checking
+- **Caching**: Content-based caching for 10-100x speedup on repeated validations
+- **HTTPS outcalls**: Transform function detection, URL length limits, cycle management
+- **Security patterns**: Caller validation, trap safety, overflow checks
 
-**Rich Diagnostics:**
-- ICP-specific explanations for every issue
-- Code snippets showing how to fix
-- Official documentation references
-- Working examples demonstrating correct patterns
-- 18 enhanced security and validation patterns
-
-**Performance:**
-- Content-based validation caching (10-100x faster repeated checks)
-- Parallel multi-canister validation (3-5x faster)
-- SHA-256 hash-based cache keys
-- 15-minute cache TTL
-
-**HTTPS Outcalls Validation:**
-- Missing transform function detection (consensus safety)
-- URL length validation (RFC-3986 limits)
-- Response size constraints
-- HTTP method restrictions
-- Explicit cycles payment checks
-
-## Configuration
-
-**Optional: Log Level**
-
-```bash
-export LOG_LEVEL=info  # debug, info, warn, error
-```
 
 ## Known Limitations
 
@@ -260,55 +236,25 @@ import Map "mo:core/Map";  // Works in icp/validate
 ## Development
 
 ```bash
-# Clone and setup
 git clone https://github.com/swissyai/icp-mcp.git
 cd icp-mcp
 npm install
-
-# Build
+npm test
 npm run build
-
-# Test
-npm test                  # Run all tests
-npm run test:watch        # Watch mode
-npm run test:integration  # Integration tests only
-
-# Run in development
-npm run dev
-```
-
-## Architecture
-
-```
-src/
-├── index.ts              # MCP server entry point
-├── tools/                # 12 MCP tool implementations
-├── validators/           # Language validators (candid, motoko, rust, dfx.json)
-├── analyzers/            # Project and dependency analysis
-├── executors/            # dfx CLI wrapper
-├── fetchers/             # GitHub API client for docs/examples
-└── utils/                # Caching, logging
 ```
 
 ## Roadmap
 
-**v0.6.0 (Current)**
-- Rich validation diagnostics (18 enhanced patterns)
-- HTTPS outcalls validation (transform functions, URL limits, cycle management)
-- Content-based caching (10-100x speedup on repeated validations)
-- Parallel multi-canister validation (3-5x speedup)
-- Integration test suite (15 tests passing)
+**v0.8.0 (Current)**
+- Migrated to Motoko core library
+- Full validation diagnostics with fix suggestions
+- HTTPS outcalls validation
+- Content-based caching
+- Parallel multi-canister validation
 
-**v0.5.0**
-- Testing suite (deploy, call, scenario)
-- Upgrade safety checker
-- Security pattern detection
-- Smart refactoring tools
-- Performance analysis
-
-**Future**
-- Auto-fix suggestions (ESLint-like)
-- CI/CD integration examples
+**Next**
+- Auto-fix for common errors
+- CI/CD integration
 - Additional language support
 
 ## License
