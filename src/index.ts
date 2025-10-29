@@ -10,6 +10,7 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
+import { zodToJsonSchema } from 'zod-to-json-schema';
 
 // Import the 3 unified tools
 import { queryTool } from './tools/query.js';
@@ -61,7 +62,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
     tools: TOOLS.map(tool => ({
       name: tool.name,
       description: tool.description,
-      inputSchema: tool.inputSchema,
+      inputSchema: zodToJsonSchema(tool.inputSchema, { $refStrategy: 'none' }),
     })),
   };
 });
