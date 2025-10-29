@@ -88,17 +88,18 @@ Agent handles intelligence (understanding intent, picking modules), we handle da
 
 **Token Overhead**
 
-[TOON encoding](https://github.com/johannschopplich/toon) reduces structured responses by 50-60%:
+[TOON encoding](https://github.com/johannschopplich/toon) + ultra-condensed tool descriptions:
 
-| Component | Tokens |
-|-----------|--------|
-| Query tool | 349 |
-| Action tool | 1,269 |
-| Help tool | 143 |
-| Module index (TOON) | 568 |
-| **Total** | **2,329** |
+| Component | Tokens | Notes |
+|-----------|--------|-------|
+| Query tool description | 60 | Brief summary + help pointer |
+| Action tool description | 80 | Brief summary + help pointer |
+| Help tool description | 45 | Brief summary |
+| **Total (always loaded)** | **185** | **90% reduction from v0.9.3** |
+| Help responses (cached) | ~3,500 | On-demand, cached 5 min |
+| Module index (TOON) | 568 | Included in help responses |
 
-Module list in TOON: 568 tokens vs 1,575 JSON (64% reduction).
+**Optimization**: Tool descriptions condensed 90% (1,850 → 185 tokens). Detailed documentation moved to help tool responses which are fetched on-demand and cached, making them near-zero cost after first call.
 
 **Query Operations**
 

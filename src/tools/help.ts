@@ -282,6 +282,39 @@ Search for relevant modules (no conceptual knowledge base).
 }
 \`\`\`
 
+## Operations Reference
+
+The query tool supports 3 operations:
+
+**1. list-all**
+- Returns all 44 Motoko base modules organized by category
+- Use when: Browsing available modules
+- Example: \`{ operation: "list-all" }\`
+
+**2. document**
+- Fetches live documentation from internetcomputer.org
+- Use when: Need docs for specific module(s)
+- Example: \`{ operation: "document", modules: ["Queue", "Map"] }\`
+- Returns: Markdown content with code examples and usage info
+
+**3. examples**
+- Extracts code examples from module documentation
+- Use when: Need working code samples
+- Example: \`{ operation: "examples", modules: ["Array"] }\`
+- Returns: 2-3 code blocks per module
+
+## How It Works
+
+Behind the scenes workflow:
+
+1. You make a natural language query
+2. Claude identifies relevant module(s) from the 44-module index
+3. Query tool fetches live data from internetcomputer.org
+4. Results returned in TOON format (50% token reduction)
+5. Claude presents information to you
+
+The tool handles data fetching while Claude handles all intelligence and intent understanding.
+
 ## Best Practices
 
 1. **Start broad, narrow down**: Begin with "list all X" then drill into specific modules
@@ -479,6 +512,77 @@ If parameters are missing, the tool returns helpful examples:
   "example": { ... }
 }
 \`\`\`
+
+## Intent Parsing
+
+The tool uses confidence levels to understand your intent:
+- **Confidence 0.9**: Explicit action + target ("validate Motoko code", "deploy local")
+- **Confidence 0.85**: Clear operation pattern ("test transfer", "add hooks")
+- **Confidence 0.5**: Single keyword only (ambiguous, will prompt for details)
+
+## Quick Workflows
+
+Common action sequences for ICP development:
+
+1. **Validate → Fix errors → Deploy → Test**
+   - Standard development cycle
+
+2. **Write code → Refactor (add hooks) → Validate → Deploy**
+   - Adding upgrade safety to existing canisters
+
+3. **Analyze project → Fix circular deps → Validate all → Deploy**
+   - Multi-canister project debugging
+
+4. **Modify interface → Check upgrade safety → Deploy upgrade → Test**
+   - Safe canister upgrades
+
+## Response Formats by Action Type
+
+What each action returns:
+
+- **Validation**: Structured issues with severity, line numbers, suggestions
+- **Testing**: Method return value or execution error
+- **Deployment**: Status, canister IDs, build output (markdown)
+- **Refactoring**: Modified code + detailed change log
+- **Analysis**: Project structure with dependency graph (TOON format)
+- **Upgrade**: Safety status with breaking changes list
+
+## Per-Action Guidance
+
+Quick reference for what each action needs:
+
+**Validation**
+- Provide: \`code\` and \`language\` in context
+- Compilers used: moc (Motoko), didc (Candid), pattern checks (Rust)
+
+**Testing**
+- Provide: \`canisterId\` and \`method\` name
+- Optional: \`args\`, \`network\` (local/playground/ic), \`mode\` (query/update)
+
+**Deployment**
+- Run from project directory or provide \`projectPath\`
+- Optional: \`network\` (local/playground), \`mode\` (install/reinstall/upgrade), \`canisters\`
+
+**Refactoring**
+- Provide: \`code\`, \`language\`, and \`refactoring\` type
+- Types: add-upgrade-hooks, add-stable-vars, add-caller-checks, modernize
+
+**Analysis**
+- Run from project root or provide \`projectPath\`
+- Optional: \`validate\` (default: true), \`checkDependencies\` (default: true)
+
+**Upgrade Check**
+- Provide: both \`oldCandid\` and \`newCandid\` interface definitions
+
+## Tips for Guiding Users
+
+When actions fail, help users debug:
+
+- **If validation fails**: Show specific errors with line numbers
+- **If deployment fails**: Suggest checking dfx.json and network status
+- **If test fails**: Verify canister ID and method signature match
+- **If refactoring requested**: Explain what changes will be made before applying
+- **For upgrades**: Always recommend checking compatibility first
 
 ## Best Practices
 
@@ -884,27 +988,8 @@ Use this to track and optimize your usage patterns.
 // Export for use in main index
 export const helpTool = {
   name: 'icp/help',
-  description: `Learn about ICP-MCP capabilities and usage patterns.
-
-META INFORMATION tool providing self-documentation and guidance.
-
-Use this when:
-- You're not sure what ICP-MCP can do
-- You need usage examples
-- You want to understand token efficiency
-- You need help with Query or Action tools
-
-Sections available:
-- "overview": High-level capabilities (default)
-- "query": Query tool detailed documentation
-- "action": Action tool detailed documentation
-- "examples": Real-world usage scenarios
-- "tokens": Token efficiency information
-- "all": Complete documentation
-
-Returns: Markdown-formatted help content optimized for quick scanning.
-
-This tool is lightweight (~300 tokens) and designed to get you productive fast.`,
+  description:
+    'Get comprehensive documentation, usage patterns, and examples for ICP-MCP tools. Covers query operations (section=\'query\'), action types with workflows (section=\'action\'), real-world scenarios (section=\'examples\'), and token efficiency (section=\'tokens\').',
   inputSchema: HelpInputSchema,
   execute: help,
 };

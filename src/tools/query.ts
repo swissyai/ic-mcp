@@ -253,42 +253,8 @@ async function fetchExamples(moduleNames: string[]) {
 // Export for use in main index
 export const queryTool = {
   name: 'icp/query',
-  description: `Fetch ICP module data. Claude handles intelligence, this tool handles fetching.
-
-OPERATIONS:
-
-1. list-all
-   Returns all 44 Motoko base modules organized by category.
-   Use when: User wants to browse available modules
-   Example: { operation: "list-all" }
-
-2. document
-   Fetches live documentation from internetcomputer.org
-   Use when: User needs docs for specific module(s)
-   Example: { operation: "document", modules: ["Queue", "Map"] }
-   Returns: Markdown content with code examples and usage info
-
-3. examples
-   Extracts code examples from module documentation
-   Use when: User needs working code samples
-   Example: { operation: "examples", modules: ["Array"] }
-   Returns: 2-3 code blocks per module
-
-MODULES AVAILABLE (44 total):
-
-Data Structures: Array, VarArray, Buffer, Map, HashMap, RBTree, TrieMap, Set, TrieSet, List, Queue, Stack, Deque
-Primitives: Bool, Char, Text, Blob, Int, Int8, Int16, Int32, Int64, Nat, Nat8, Nat16, Nat32, Nat64, Float
-Control: Option, Result, Error, Debug, Func, Iter, Order
-System: Principal, Cycles, CertifiedData, Region, Runtime, Time, Timer, Random, ExperimentalCycles
-
-WORKFLOW:
-1. Claude sees user request
-2. Claude identifies relevant module(s) from list above
-3. Claude calls this tool with specific operation
-4. We fetch data from internetcomputer.org
-5. Claude presents to user
-
-No scoring, no ranking, no intent parsing - Claude handles all intelligence.`,
+  description:
+    'Search and discover ICP modules, fetch live documentation and code examples from internetcomputer.org. Supports semantic search across 44 Motoko base library modules (Data Structures, Primitives, Control, System) with intelligent intent detection. Use icp/help section=\'query\' for detailed usage patterns and examples.',
   inputSchema: QueryInputSchema,
   execute: query,
 };

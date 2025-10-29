@@ -132,7 +132,7 @@ async function main() {
   await server.connect(transport);
 
   logger.info('ICP-MCP Server running');
-  logger.info('Token overhead: ~3500 tokens');
+  logger.info('Tool overhead: ~185 tokens (help responses cached on-demand)');
 }
 
 main().catch((error) => {
