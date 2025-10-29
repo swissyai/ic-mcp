@@ -14,16 +14,7 @@ import {
 } from '../data/modules-minimal.js';
 import { logger } from '../utils/logger.js';
 import { getUserAgent } from '../utils/version.js';
-import { readFileSync } from 'fs';
-import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
-
-// Load use-case metadata
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-const useCaseData = JSON.parse(
-  readFileSync(join(__dirname, '../data/use-cases.json'), 'utf-8')
-);
+import { useCaseData } from '../data/use-cases.js';
 
 // Input schema for the query tool
 export const QueryInputSchema = z.object({
