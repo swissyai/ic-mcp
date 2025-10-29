@@ -12,14 +12,14 @@ claude mcp add --scope user --transport stdio ic-mcp -- npx -y ic-mcp
 
 ### Discovery
 
-Ask about what exists:
+Ask about modules:
 ```
 "What data structures does ICP have?"
 "How do I handle random numbers?"
 "Show me Map examples"
 ```
 
-Returns modules, documentation, and working code. Semantic search understands intent - ask for "token canister" and get relevant modules (Map, Principal, Nat).
+Claude picks relevant modules from the index, we fetch live documentation and code examples from internetcomputer.org.
 
 ### Validation
 
@@ -56,15 +56,15 @@ Supports both Motoko and Rust. Tracks changes, shows exactly what was modified.
 Building a token canister:
 ```
 "What modules do I need for a token canister?"
-  → Map for balances, Principal for accounts, Nat for amounts
+  → Claude picks: Map, Principal, Nat
 
 "Show me Map examples"
-  → Documentation and working code
+  → We fetch live docs from internetcomputer.org
 
 [Write implementation]
 
 "Validate this Motoko code"
-  → Compilation check, catch errors
+  → moc compiler checks, catch errors
 
 "Deploy to local dfx network"
   → Automated deployment
@@ -79,26 +79,33 @@ Five natural language commands from concept to deployed canister.
 
 **Architecture**
 
-Three tools with natural language interfaces:
-- `icp/query` - Discovery, documentation, examples (45 modules indexed)
-- `icp/action` - Validation, deployment, testing, refactoring
+Three tools:
+- `icp/query` - Fetches module list, documentation, code examples (44 modules indexed)
+- `icp/action` - Validates, deploys, tests, refactors
 - `icp/help` - Self-documentation
 
-Intent parsing extracts actions from natural language. Confidence scoring routes requests. Parameter extraction handles developer descriptions.
+Claude handles intelligence (understanding intent, picking modules), we handle data fetching and code operations.
 
-**Token Efficiency**
+**Token Overhead**
 
 [TOON encoding](https://github.com/johannschopplich/toon) reduces structured responses by 50-60%:
 
 | Component | Tokens |
 |-----------|--------|
-| 3 tool descriptions | 481 |
-| Module index | 568 |
-| Use-case metadata | 1,449 |
-| Semantic search data | 1,575 |
-| **Total** | **4,073** |
+| Query tool | 349 |
+| Action tool | 1,269 |
+| Help tool | 143 |
+| Module index (TOON) | 568 |
+| **Total** | **2,329** |
 
-Equivalent JSON representation: 12,000+ tokens. Module list: 568 vs 1,575 (64% reduction). Search results: 140 vs 364 (62% reduction).
+Module list in TOON: 568 tokens vs 1,575 JSON (64% reduction).
+
+**Query Operations**
+
+Three simple operations:
+- `list-all` - Return all 44 modules organized by category
+- `document` - Fetch live docs from internetcomputer.org for specified modules
+- `examples` - Extract code samples from documentation
 
 **Validation**
 
@@ -109,7 +116,7 @@ Uses actual compilers, not pattern matching:
 
 **Module Index**
 
-45 Motoko base library modules with AI-generated use-case keywords. Compressed storage (`n`, `d`, `c`, `p`) expands on-demand. Semantic search maps queries like "token canister" to relevant modules (Map, Principal, Nat).
+44 Motoko base library modules compressed (`n`, `d`, `c`, `p`) and expanded on-demand. All modules listed in tool description for Claude to reference.
 
 ## Configuration
 
@@ -143,8 +150,8 @@ npm test
 ## Reference
 
 **Capabilities**
-- 45 Motoko base library modules indexed
-- Natural language intent parsing with confidence scoring
+- 44 Motoko base library modules indexed
+- Live documentation fetching from internetcomputer.org
 - Real compiler validation (moc, didc)
 - Candid interface compatibility checking
 - Upgrade safety analysis
