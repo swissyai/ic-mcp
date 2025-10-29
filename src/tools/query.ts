@@ -576,23 +576,68 @@ function findRelatedModules(_intent: ParsedIntent, result: any): any[] {
 // Export for use in main index
 export const queryTool = {
   name: 'icp/query',
-  description: `Natural language interface for ICP development knowledge.
+  description: `ICP knowledge layer - discovers modules, fetches documentation, finds examples.
 
-ALWAYS START HERE for any ICP question or documentation need.
+PURPOSE: Help users find and learn about Internet Computer (ICP) Motoko modules through natural language.
 
-Understands queries like:
-- "list all data structures" → discovers relevant modules
-- "how do I use Array" → fetches Array documentation
-- "token canister example" → finds templates and examples
-- "which module for random numbers" → intelligent search
+WHEN TO USE:
+- User asks "what modules exist" or "show me X"
+- User wants documentation for a specific module
+- User needs code examples
+- User is exploring ICP capabilities
 
-Features:
-- Semantic matching using AI-generated use-cases
-- TOON format by default (50% fewer tokens)
-- Smart caching with offline fallback
-- Context-aware suggestions
+HOW IT UNDERSTANDS QUERIES:
 
-Returns TOON-formatted data for efficiency.`,
+1. DISCOVERY (list, show, browse, all)
+   Examples:
+   - "list all data structures" → returns organized module categories
+   - "show me map modules" → returns Map, HashMap, RBTree, TrieMap
+   - "what modules are available" → full module catalog
+
+2. SEARCH (keywords, use-cases)
+   Examples:
+   - "random numbers" → finds Random module (semantic matching)
+   - "token canister" → finds ICRC1, ICRC2, Principal, Nat modules
+   - "queue operations" → finds Queue, Deque, List modules
+
+3. DOCUMENTATION (how, docs, explain, use)
+   Examples:
+   - "how to use Map" → fetches full documentation with examples
+   - "explain Array module" → gets Array docs from internetcomputer.org
+   - "documentation for Principal" → live doc fetching
+
+4. EXAMPLES (examples, samples, code, snippets)
+   Examples:
+   - "Array examples" → extracts code samples from docs
+   - "show me Map code" → returns working code examples
+   - "List usage samples" → 2-3 practical examples
+
+5. EMPTY QUERY → returns full module list (good for exploration)
+
+KEY FEATURES:
+- 45 Motoko base modules indexed
+- Semantic search (understands intent, not just keywords)
+- Live documentation fetching from internetcomputer.org
+- Related modules automatically suggested
+- TOON format (50% smaller responses)
+
+GUIDANCE FOR USERS:
+- If unsure, suggest: "Try: list all data structures"
+- For learning: "Ask: how to use [module name]"
+- For examples: "Request: [module] examples"
+- For discovery: "Query: [what you're trying to do]"
+
+RESPONSE FORMAT:
+Returns TOON-encoded data with metadata including:
+- intent: what query type was detected
+- confidence: how certain (0.6-0.9, higher is better)
+- suggestions: helpful next queries
+- related: similar modules to explore
+
+COMMON USER PATTERNS:
+1. Exploration: "list all" → "how to use X" → "X examples"
+2. Problem-solving: "how do I [task]" → search results → "use [module]"
+3. Learning: "explain [concept]" → relevant modules → documentation`,
   inputSchema: QueryInputSchema,
   execute: query,
 };
