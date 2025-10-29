@@ -244,18 +244,20 @@ Get code examples for modules.
 \`\`\`
 
 ### 5. **explain** (70% confidence)
-Get conceptual explanations.
+Search for relevant modules (no conceptual knowledge base).
 
 **Patterns**: General "explain" or "what is" queries
 
 **Examples**:
 \`\`\`
 { "query": "explain stable memory" }
-→ Returns explanation of stable memory concepts
+→ Searches for modules related to stable memory
 
 { "query": "what is orthogonal persistence" }
-→ Returns conceptual explanation
+→ Searches for relevant modules, suggests docs
 \`\`\`
+
+**Note**: For conceptual explanations, use official ICP documentation. This tool focuses on module discovery.
 
 ## Options
 

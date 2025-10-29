@@ -9,9 +9,11 @@ import {
   MODULES_MINIMAL,
   expandModule,
   getModulesByCategory,
-  getModule
+  getModule,
+  getCategoryKeywords
 } from '../data/modules-minimal.js';
 import { logger } from '../utils/logger.js';
+import { getUserAgent } from '../utils/version.js';
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
@@ -56,33 +58,38 @@ interface ParsedIntent {
 export async function query(input: QueryInput) {
   const trimmed = input.query.trim();
 
-  // Empty query = show quick overview / getting started guide
+  // Empty query = return useful default (module list)
   if (trimmed.length === 0) {
+    // Instead of marketing text, return actual module list
+    const categories: Record<string, any[]> = {};
+    for (const module of MODULES_MINIMAL) {
+      const [cat] = module.c.split('/');
+      if (!categories[cat]) categories[cat] = [];
+      categories[cat].push(expandModule(module));
+    }
+
+    const encoded = DataEncoder.encode({
+      action: 'list-all',
+      total: MODULES_MINIMAL.length,
+      categories,
+    }, input.format);
+
     return {
       content: [{
         type: 'text' as const,
-        text: `# Welcome to IC-MCP!
-
-## Three Tools for ICP Development
-
-**icp/query** - Discover and learn about ICP modules
-  Example: "list all data structures"
-  Example: "how to use the Array module"
-
-**icp/action** - Validate, test, and deploy code
-  Example: "validate my Motoko code"
-  Example: "deploy to local network"
-
-**icp/help** - Detailed guidance and examples
-  Use: icp/help with section: "overview", "query", "action", or "examples"
-
-## Quick Start
-Try: "list all ICP modules" to see what's available
-Or: "how do I use Map" to learn about a specific module
-
-## Full Capabilities
-Use: icp/help { section: "examples" } for real-world workflows`
-      }]
+        text: encoded,
+      }],
+      metadata: {
+        intent: 'discover',
+        confidence: 1.0,
+        format: input.format,
+        tokenEstimate: DataEncoder.estimateTokens(encoded),
+        suggestions: [
+          'Pick a module: "how to use [module]"',
+          'Search: "queue operations"',
+          'Get help: use icp/help tool',
+        ],
+      },
     };
   }
 
@@ -141,11 +148,20 @@ Use: icp/help { section: "examples" } for real-world workflows`
 
 /**
  * Parse natural language query to determine intent
+ *
+ * Confidence scoring rationale:
+ * - 0.9: Strong explicit keywords (list, validate, deploy) - rarely ambiguous
+ * - 0.85: Clear intent with context (how + module name, test + method)
+ * - 0.8: Specific patterns (example, code) - usually clear
+ * - 0.7: Weaker signals (explain) - often needs fallback
+ * - 0.6: Default search - catch-all, lowest confidence
+ *
+ * Lower confidence triggers more defensive handling and clearer error messages
  */
 function parseIntent(query: string): ParsedIntent {
   const q = query.toLowerCase();
 
-  // Discovery patterns
+  // Discovery patterns (0.9: explicit listing keywords)
   if (/\b(list|show|all|available|browse|discover)\b/.test(q)) {
     // Check if it's a "list all" or "show all" pattern (no specific category)
     if (/\b(list|show)\s+(all|everything)\b/.test(q)) {
@@ -157,17 +173,26 @@ function parseIntent(query: string): ParsedIntent {
       };
     }
 
-    // Check for category mentions (but not "list" itself since it's ambiguous)
-    const categoryMatch = q.match(/\b(array|map|set|number|text|system|util|buffer|iter|option|result)/);
+    // Check for category mentions using data-driven keywords
+    const categoryKeywords = getCategoryKeywords();
+    let matchedCategory: string | undefined;
+
+    for (const keyword of categoryKeywords) {
+      if (q.includes(keyword)) {
+        matchedCategory = keyword;
+        break;
+      }
+    }
+
     return {
       type: 'discover',
-      category: categoryMatch ? categoryMatch[1] : undefined,
+      category: matchedCategory,
       query: q,
       confidence: 0.9,
     };
   }
 
-  // Documentation patterns
+  // Documentation patterns (0.85 with module, 0.7 without - context matters)
   if (/\b(how|documentation|docs?|explain|use)\b/.test(q)) {
     const modules = extractModuleNames(q);
     return {
@@ -178,7 +203,7 @@ function parseIntent(query: string): ParsedIntent {
     };
   }
 
-  // Example patterns
+  // Example patterns (0.8: specific but requires module context)
   if (/\b(examples?|samples?|code|templates?|snippets?)\b/.test(q)) {
     const modules = extractModuleNames(q);
     return {
@@ -189,7 +214,7 @@ function parseIntent(query: string): ParsedIntent {
     };
   }
 
-  // Search patterns (default)
+  // Search patterns (0.6: default fallback, weakest signal)
   return {
     type: 'search',
     query: q,
@@ -336,7 +361,7 @@ async function handleDocumentation(intent: ParsedIntent, input: QueryInput) {
         try {
           logger.debug(`Fetching docs from: ${m.docUrl}`);
           const response = await fetch(m.docUrl, {
-            headers: { 'User-Agent': 'ic-mcp/0.9.0' },
+            headers: { 'User-Agent': getUserAgent() },
             signal: AbortSignal.timeout(5000)
           });
 
@@ -422,7 +447,7 @@ async function handleExamples(intent: ParsedIntent, _input: QueryInput) {
         try {
           logger.debug(`Fetching examples from: ${m.docUrl}`);
           const response = await fetch(m.docUrl, {
-            headers: { 'User-Agent': 'ic-mcp/0.9.0' },
+            headers: { 'User-Agent': getUserAgent() },
             signal: AbortSignal.timeout(5000)
           });
 
@@ -490,17 +515,18 @@ async function handleExamples(intent: ParsedIntent, _input: QueryInput) {
 
 /**
  * Handle explanation requests
+ * Routes to search since we don't have a conceptual knowledge base
  */
-async function handleExplanation(intent: ParsedIntent, _input: QueryInput) {
+async function handleExplanation(intent: ParsedIntent, input: QueryInput) {
+  // Be honest: we don't have explanatory content, so search for relevant modules
+  // This is more useful than returning generic marketing text
+  const searchResult = await handleSearch(intent, input);
+
+  // Add helpful context about what we found
   return {
-    action: 'explain',
-    query: intent.query,
-    explanation: 'Use the ICP-MCP to explore Motoko modules and their functionality.',
-    suggestions: [
-      'Try: "list all data structures"',
-      'Try: "how to use Array"',
-      'Try: "random number generation"',
-    ],
+    ...searchResult,
+    action: 'explain-via-search',
+    note: 'Searched for relevant modules. Use "how to use [module]" for detailed documentation.',
   };
 }
 

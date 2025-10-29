@@ -166,3 +166,56 @@ export function getCategories(): string[] {
   });
   return Array.from(cats);
 }
+
+/**
+ * Get all category keywords for pattern matching
+ * Returns both abbreviated and expanded forms
+ */
+export function getCategoryKeywords(): string[] {
+  const keywords = new Set<string>();
+
+  // Add main category abbreviations and expansions
+  const mainMap: Record<string, string> = {
+    'ds': 'data-structures',
+    'prim': 'primitives',
+    'util': 'utilities',
+    'sys': 'system'
+  };
+
+  // Add sub-category expansions
+  const subMap: Record<string, string> = {
+    'arr': 'arrays',
+    'map': 'maps',
+    'set': 'sets',
+    'list': 'lists',
+    'bool': 'boolean',
+    'text': 'text',
+    'bin': 'binary',
+    'num': 'numbers',
+    'ctrl': 'control',
+    'fn': 'functions',
+    'id': 'identity',
+    'cert': 'certified',
+    'mem': 'memory',
+    'rt': 'runtime',
+    'rand': 'random',
+    'exp': 'experimental'
+  };
+
+  // Add all variations
+  Object.values(mainMap).forEach(v => keywords.add(v));
+  Object.values(subMap).forEach(v => keywords.add(v));
+
+  // Add singular forms too
+  keywords.add('array');
+  keywords.add('number');
+  keywords.add('utility');
+  keywords.add('function');
+
+  // Add common synonyms
+  keywords.add('data');
+  keywords.add('structure');
+  keywords.add('primitive');
+
+  return Array.from(keywords);
+}

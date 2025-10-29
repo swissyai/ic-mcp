@@ -152,11 +152,19 @@ export async function action(input: ActionInput) {
 
 /**
  * Parse natural language action to determine intent
+ *
+ * Confidence scoring rationale:
+ * - 0.9: Explicit action keywords with target (validate + language, deploy, analyze + project)
+ * - 0.85: Clear operations with standard patterns (test + method, refactor + specific type, upgrade check)
+ * - 0.5: Fallback guesses based on single keywords - user should be more specific
+ *
+ * High confidence (0.85+) means we can proceed directly
+ * Low confidence (<0.7) should return helpful error with examples
  */
 function parseActionIntent(action: string, context?: any): ParsedAction {
   const a = action.toLowerCase();
 
-  // Validate patterns
+  // Validate patterns (0.9: explicit validation with language)
   if (/\b(validate|check|verify|lint)\b.*\b(code|candid|motoko|rust|dfx)/i.test(a)) {
     return {
       type: 'validate',
@@ -165,7 +173,7 @@ function parseActionIntent(action: string, context?: any): ParsedAction {
     };
   }
 
-  // Test patterns
+  // Test patterns (0.85: standard testing operation with context)
   if (/\b(test|call|invoke|execute|run)\b.*\b(method|function|canister)/i.test(a)) {
     return {
       type: 'test',
@@ -174,7 +182,7 @@ function parseActionIntent(action: string, context?: any): ParsedAction {
     };
   }
 
-  // Deploy patterns
+  // Deploy patterns (0.9: unambiguous deployment action)
   if (/\b(deploy|install|publish)\b/i.test(a)) {
     return {
       type: 'deploy',
@@ -183,7 +191,7 @@ function parseActionIntent(action: string, context?: any): ParsedAction {
     };
   }
 
-  // Refactor patterns
+  // Refactor patterns (0.85: clear transformation with specific target)
   if (/\b(refactor|transform|add|modernize)\b.*\b(upgrade|stable|hooks|caller)/i.test(a)) {
     return {
       type: 'refactor',
@@ -192,7 +200,7 @@ function parseActionIntent(action: string, context?: any): ParsedAction {
     };
   }
 
-  // Analyze patterns
+  // Analyze patterns (0.9: explicit analysis command)
   if (/\b(analyze|inspect|review|examine)\b.*\b(project|structure|dependencies)/i.test(a)) {
     return {
       type: 'analyze',
@@ -201,7 +209,7 @@ function parseActionIntent(action: string, context?: any): ParsedAction {
     };
   }
 
-  // Check upgrade patterns
+  // Check upgrade patterns (0.85: standard safety check)
   if (/\b(check|verify|test)\b.*\b(upgrade|compatibility|interface|breaking)/i.test(a)) {
     return {
       type: 'check-upgrade',
@@ -210,7 +218,7 @@ function parseActionIntent(action: string, context?: any): ParsedAction {
     };
   }
 
-  // Fallback: guess based on keywords
+  // Fallback: weak guesses (0.5: single keyword, very ambiguous)
   if (/validate|lint|syntax/i.test(a)) {
     return { type: 'validate', confidence: 0.5, params: {} };
   }

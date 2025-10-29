@@ -17,6 +17,7 @@ import { actionTool } from './tools/action.js';
 import { helpTool } from './tools/help.js';
 
 import { logger, LogLevel } from './utils/logger.js';
+import { getVersion } from './utils/version.js';
 
 // Set log level from environment
 const logLevel = process.env.LOG_LEVEL || 'info';
@@ -28,7 +29,7 @@ logger.setLevel(LogLevel[logLevel.toUpperCase() as keyof typeof LogLevel] || Log
 const server = new Server(
   {
     name: 'ic-mcp',
-    version: '0.9.0',
+    version: getVersion(),
   },
   {
     capabilities: {
