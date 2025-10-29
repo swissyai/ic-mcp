@@ -41,7 +41,7 @@ const server = new Server(
 /**
  * 3-Tool Architecture
  *
- * Query:  ICP knowledge layer (discover, search, document, examples)
+ * Query:  Data fetching (list modules, fetch docs, fetch examples)
  * Action: Code operations (validate, test, deploy, refactor, analyze, upgrade)
  * Help:   Meta information (how to use ICP-MCP itself)
  */

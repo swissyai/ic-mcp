@@ -135,30 +135,30 @@ describe('Tool Description Token Overhead', () => {
 });
 
 describe('Response Time Performance', () => {
-  it('should respond quickly to common queries', async () => {
+  it('should respond quickly to common operations', async () => {
     const { query } = await import('../../src/tools/query.js');
 
-    const queries = [
-      { name: 'Empty query (module list)', query: '' },
-      { name: 'Discovery (list all)', query: 'list all data structures' },
-      { name: 'Search (keywords)', query: 'random numbers' },
-      { name: 'Search (use-case)', query: 'token canister' },
+    const operations = [
+      { name: 'List all modules', operation: 'list-all' as const },
+      { name: 'Fetch documentation', operation: 'document' as const, modules: ['Array'] },
     ];
 
     console.log('⏱️  Query Response Times:');
-    console.log('  Query                      | Time (ms)');
+    console.log('  Operation                  | Time (ms)');
     console.log('  ---------------------------|----------');
 
-    for (const { name, query: q } of queries) {
+    for (const { name, operation, modules } of operations) {
       const start = performance.now();
-      await query({ query: q, format: 'json' });
+      await query({ operation, modules, format: 'json' });
       const end = performance.now();
       const duration = (end - start).toFixed(1);
 
       console.log(`  ${name.padEnd(26)} | ${duration.padStart(7)}ms`);
 
-      // All queries should be fast (< 500ms without network)
-      expect(end - start).toBeLessThan(500);
+      // List-all should be instant, document may take time for network fetch
+      if (operation === 'list-all') {
+        expect(end - start).toBeLessThan(100);
+      }
     }
   });
 });
