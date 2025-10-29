@@ -125,17 +125,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
  * Start server
  */
 async function main() {
-  logger.info('Starting ICP-MCP Server (3-Tool Architecture)');
+  logger.info('Starting ICP-MCP Server');
   logger.info(`Tools available: ${TOOLS.map(t => t.name).join(', ')}`);
 
   const transport = new StdioServerTransport();
   await server.connect(transport);
 
   logger.info('ICP-MCP Server running');
-
-  // Log token efficiency info
-  logger.info('TOON-first architecture active: 45-50% token reduction on structured data');
-  logger.info('Estimated token overhead: ~3500 tokens (well under 10k target)');
+  logger.info('Token overhead: ~3500 tokens');
 }
 
 main().catch((error) => {
