@@ -179,7 +179,7 @@ function parseIntent(query: string): ParsedIntent {
   }
 
   // Example patterns
-  if (/\b(example|sample|code|template|snippet)\b/.test(q)) {
+  if (/\b(examples?|samples?|code|templates?|snippets?)\b/.test(q)) {
     const modules = extractModuleNames(q);
     return {
       type: 'example',
@@ -407,16 +407,85 @@ async function handleExamples(intent: ParsedIntent, _input: QueryInput) {
     };
   }
 
-  // In production, would fetch real examples
-  return {
-    action: 'example',
-    modules: moduleNames,
-    examples: moduleNames.map(name => ({
-      module: name,
-      code: `import ${name} "mo:core/${name}";\n\n// Example usage of ${name}`,
-      description: `Common patterns for using ${name} module`,
-    })),
-  };
+  const modules = moduleNames.map(name => {
+    const mod = getModule(name);
+    return mod ? expandModule(mod) : null;
+  }).filter(Boolean);
+
+  // Fetch actual examples from documentation
+  try {
+    const fetch = (await import('node-fetch')).default;
+    const { default: TurndownService } = await import('turndown');
+
+    const examplesWithContent = await Promise.all(
+      modules.map(async (m: any) => {
+        try {
+          logger.debug(`Fetching examples from: ${m.docUrl}`);
+          const response = await fetch(m.docUrl, {
+            headers: { 'User-Agent': 'ic-mcp/0.9.0' },
+            signal: AbortSignal.timeout(5000)
+          });
+
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+          }
+
+          const html = await response.text();
+
+          // Convert HTML to markdown
+          const turndown = new TurndownService({
+            headingStyle: 'atx',
+            codeBlockStyle: 'fenced',
+          });
+          const markdown = turndown.turndown(html);
+
+          // Extract code examples (code blocks)
+          const codeBlocks: string[] = [];
+          const codeBlockRegex = /```(?:motoko)?\n([\s\S]*?)```/g;
+          let match;
+          while ((match = codeBlockRegex.exec(markdown)) !== null) {
+            codeBlocks.push(match[1].trim());
+          }
+
+          return {
+            module: m.name,
+            examples: codeBlocks.slice(0, 3), // Limit to 3 examples per module
+            source: m.docUrl,
+            hasExamples: codeBlocks.length > 0,
+          };
+        } catch (error: any) {
+          logger.warn(`Failed to fetch ${m.name} examples: ${error.message}`);
+          return {
+            module: m.name,
+            examples: [],
+            source: m.docUrl,
+            hasExamples: false,
+            error: `Examples unavailable. View at: ${m.docUrl}`,
+          };
+        }
+      })
+    );
+
+    return {
+      action: 'example',
+      modules: examplesWithContent,
+      format: 'detailed',
+    };
+  } catch (error: any) {
+    logger.error('Examples fetch error:', error);
+    // Fallback to URLs only
+    return {
+      action: 'example',
+      modules: modules.map(m => ({
+        module: m.name,
+        examples: [],
+        source: m.docUrl,
+        hasExamples: false,
+        error: `View examples at: ${m.docUrl}`,
+      })),
+      format: 'summary',
+    };
+  }
 }
 
 /**

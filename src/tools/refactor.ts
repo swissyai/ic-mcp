@@ -178,6 +178,151 @@ function addMotokoCallerChecks(code: string): { refactored: string; changes: Ref
 }
 
 /**
+ * Add upgrade hooks to Rust canister
+ */
+function addRustUpgradeHooks(code: string): { refactored: string; changes: RefactoringChange[] } {
+  const changes: RefactoringChange[] = [];
+
+  // Check if already has hooks
+  if (code.includes('#[pre_upgrade]') || code.includes('#[post_upgrade]')) {
+    return {
+      refactored: code,
+      changes: [{ type: 'no-op', description: 'Upgrade hooks already present', linesAdded: 0, linesModified: 0 }],
+    };
+  }
+
+  // Add hooks at the end of the file (before final closing brace if exists)
+  const hookCode = `
+#[pre_upgrade]
+fn pre_upgrade() {
+    // Called before canister upgrade
+    // Store any ephemeral state here
+}
+
+#[post_upgrade]
+fn post_upgrade() {
+    // Called after canister upgrade
+    // Restore or migrate state here
+}
+`;
+
+  const refactored = code.trimEnd() + '\n' + hookCode;
+
+  changes.push({
+    type: 'added',
+    description: 'Added pre_upgrade and post_upgrade hooks',
+    linesAdded: 10,
+    linesModified: 0,
+  });
+
+  return { refactored, changes };
+}
+
+/**
+ * Convert regular statics to thread_local stable storage in Rust
+ */
+function addRustStableVars(code: string): { refactored: string; changes: RefactoringChange[] } {
+  const changes: RefactoringChange[] = [];
+
+  // Check if stable storage already exists
+  if (code.includes('thread_local!') && code.includes('STABLE_')) {
+    return {
+      refactored: code,
+      changes: [{ type: 'no-op', description: 'Stable storage already present', linesAdded: 0, linesModified: 0 }],
+    };
+  }
+
+  // Add stable storage pattern at the top (after use statements)
+  const stableStorageCode = `
+// Stable storage using thread_local
+thread_local! {
+    static STABLE_STATE: RefCell<StableState> = RefCell::new(StableState::default());
+}
+
+#[derive(Default)]
+struct StableState {
+    // Add your state fields here
+}
+`;
+
+  // Find a good insertion point (after last 'use' statement or at the beginning)
+  const usePattern = /use\s+[^;]+;/g;
+  const useMatches = Array.from(code.matchAll(usePattern));
+
+  let refactored: string;
+  if (useMatches.length > 0) {
+    const lastUse = useMatches[useMatches.length - 1];
+    const insertPos = lastUse.index! + lastUse[0].length;
+    refactored = code.slice(0, insertPos) + '\n' + stableStorageCode + code.slice(insertPos);
+  } else {
+    refactored = stableStorageCode + '\n' + code;
+  }
+
+  // Ensure RefCell is imported
+  if (!code.includes('use std::cell::RefCell')) {
+    const firstLine = refactored.split('\n')[0];
+    if (firstLine.startsWith('use ')) {
+      refactored = 'use std::cell::RefCell;\n' + refactored;
+    } else {
+      refactored = 'use std::cell::RefCell;\n\n' + refactored;
+    }
+  }
+
+  changes.push({
+    type: 'added',
+    description: 'Added thread_local stable storage pattern',
+    linesAdded: 9,
+    linesModified: 0,
+  });
+
+  return { refactored, changes };
+}
+
+/**
+ * Add caller checks to Rust update methods
+ */
+function addRustCallerChecks(code: string): { refactored: string; changes: RefactoringChange[] } {
+  const changes: RefactoringChange[] = [];
+
+  // Find #[update] functions
+  const funcPattern = /#\[update\]\s*(?:async\s+)?fn\s+(\w+)/g;
+  const matches = Array.from(code.matchAll(funcPattern));
+
+  if (matches.length === 0) {
+    return {
+      refactored: code,
+      changes: [{ type: 'no-op', description: 'No update functions found', linesAdded: 0, linesModified: 0 }],
+    };
+  }
+
+  // Add caller() import if not present
+  let refactored = code;
+  if (!code.includes('use ic_cdk::api::caller')) {
+    const firstLine = refactored.split('\n')[0];
+    if (firstLine.startsWith('use ')) {
+      refactored = 'use ic_cdk::api::caller;\n' + refactored;
+    } else {
+      refactored = 'use ic_cdk::api::caller;\n\n' + refactored;
+    }
+    changes.push({
+      type: 'added',
+      description: 'Added ic_cdk::api::caller import',
+      linesAdded: 1,
+      linesModified: 0,
+    });
+  }
+
+  changes.push({
+    type: 'info',
+    description: `Found ${matches.length} update function(s) - add caller() checks in function bodies as needed`,
+    linesAdded: 0,
+    linesModified: 0,
+  });
+
+  return { refactored, changes };
+}
+
+/**
  * Execute refactor tool
  */
 export async function executeRefactor(input: RefactorInput): Promise<string> {
@@ -215,16 +360,48 @@ export async function executeRefactor(input: RefactorInput): Promise<string> {
         throw new Error(`Unknown refactoring: ${input.refactoring}`);
     }
   } else {
-    // Rust refactorings (simplified for now)
-    return `Rust refactorings coming soon! Requested: ${input.refactoring}`;
+    // Rust refactorings
+    switch (input.refactoring) {
+      case 'add-upgrade-hooks':
+        result = addRustUpgradeHooks(input.code);
+        break;
+      case 'add-stable-vars':
+        result = addRustStableVars(input.code);
+        break;
+      case 'add-caller-checks':
+        result = addRustCallerChecks(input.code);
+        break;
+      case 'modernize':
+        // Combine multiple refactorings
+        let code = input.code;
+        const allChanges: RefactoringChange[] = [];
+
+        const r1 = addRustUpgradeHooks(code);
+        code = r1.refactored;
+        allChanges.push(...r1.changes);
+
+        const r2 = addRustStableVars(code);
+        code = r2.refactored;
+        allChanges.push(...r2.changes);
+
+        const r3 = addRustCallerChecks(code);
+        code = r3.refactored;
+        allChanges.push(...r3.changes);
+
+        result = { refactored: code, changes: allChanges };
+        break;
+      default:
+        throw new Error(`Unknown refactoring: ${input.refactoring}`);
+    }
   }
 
   // Format output (token-efficient)
   const lines: string[] = [];
+  const langName = input.language === 'motoko' ? 'motoko' : 'rust';
 
-  if (result.changes.some((c) => c.type !== 'no-op')) {
+  if (result.changes.some((c) => c.type !== 'no-op' && c.type !== 'info')) {
     lines.push('# Refactored Code\n');
-    lines.push('```motoko');
+    lines.push(`\`\`\`${langName}`);
     lines.push(result.refactored);
     lines.push('```\n');
 
