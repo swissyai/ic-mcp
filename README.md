@@ -19,7 +19,7 @@ Ask about modules:
 "Show me Map examples"
 ```
 
-Claude picks relevant modules from the index, we fetch live documentation and code examples from internetcomputer.org.
+Agent picks relevant modules from the index, we fetch live documentation and code examples from internetcomputer.org.
 
 ### Validation
 
@@ -56,7 +56,7 @@ Supports both Motoko and Rust. Tracks changes, shows exactly what was modified.
 Building a token canister:
 ```
 "What modules do I need for a token canister?"
-  → Claude picks: Map, Principal, Nat
+  → Agent picks: Map, Principal, Nat
 
 "Show me Map examples"
   → We fetch live docs from internetcomputer.org
@@ -84,7 +84,7 @@ Three tools:
 - `icp/action` - Validates, deploys, tests, refactors
 - `icp/help` - Self-documentation
 
-Claude handles intelligence (understanding intent, picking modules), we handle data fetching and code operations.
+Agent handles intelligence (understanding intent, picking modules), we handle data fetching and code operations.
 
 **Token Overhead**
 
@@ -116,7 +116,7 @@ Uses actual compilers, not pattern matching:
 
 **Module Index**
 
-44 Motoko base library modules compressed (`n`, `d`, `c`, `p`) and expanded on-demand. All modules listed in tool description for Claude to reference.
+44 Motoko base library modules compressed (`n`, `d`, `c`, `p`) and expanded on-demand. All modules listed in tool description for agent to reference.
 
 ## Configuration
 
