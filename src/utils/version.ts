@@ -22,12 +22,12 @@ export function getVersion(): string {
     const __dirname = dirname(__filename);
     const packagePath = join(__dirname, '../../package.json');
     const packageJson = JSON.parse(readFileSync(packagePath, 'utf-8'));
-    const version: string = packageJson.version || '0.9.1';
+    const version: string = packageJson.version || '0.9.2';
     cachedVersion = version;
     return version;
   } catch (error) {
     // Fallback if package.json can't be read
-    const fallback = '0.9.1';
+    const fallback = '0.9.2';
     cachedVersion = fallback;
     return fallback;
   }
