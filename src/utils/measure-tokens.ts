@@ -80,21 +80,39 @@ async function measureAll() {
     m.percentage = (m.tokens / total) * 100;
   });
 
+  // Calculate practical costs
+  const alwaysLoaded = measurements
+    .filter(m => m.component.includes('Tool Description'))
+    .reduce((sum, m) => sum + m.tokens, 0);
+
+  const onDemand = measurements
+    .filter(m => m.component.includes('Module Index (TOON)'))
+    .reduce((sum, m) => sum + m.tokens, 0);
+
   // Print results
-  console.log('\nComponent Breakdown:\n');
-  console.log('Component                        Tokens    % of Total');
+  console.log('\n📊 Practical Token Usage:\n');
+  console.log('Component                        Tokens    When Loaded');
   console.log('-'.repeat(70));
 
-  measurements.forEach(m => {
-    const name = m.component.padEnd(30);
-    const tokens = m.tokens.toString().padStart(7);
-    const pct = m.percentage.toFixed(1).padStart(6);
-    console.log(`${name} ${tokens}    ${pct}%`);
-  });
+  measurements
+    .filter(m => m.component.includes('Tool Description') || m.component === 'Module Index (TOON)')
+    .forEach(m => {
+      const name = m.component.padEnd(30);
+      const tokens = m.tokens.toString().padStart(7);
+      const when = m.component.includes('Tool Description') ? 'Always' : 'On-demand';
+      console.log(`${name} ${tokens}    ${when}`);
+    });
 
   console.log('-'.repeat(70));
-  console.log(`${'TOTAL OVERHEAD'.padEnd(30)} ${total.toString().padStart(7)}`);
+  console.log(`${'ALWAYS LOADED (base cost)'.padEnd(30)} ${alwaysLoaded.toString().padStart(7)}    Always`);
+  console.log(`${'ON-DEMAND (module index)'.padEnd(30)} ${onDemand.toString().padStart(7)}    When needed`);
   console.log('='.repeat(70));
+
+  console.log('\n💡 What this means:');
+  console.log(`  • Your Claude agent pays ${alwaysLoaded} tokens when MCP is configured`);
+  console.log(`  • Module index (${onDemand} tokens) only loaded when using list-all or help`);
+  console.log(`  • Help docs (~3,500 tokens) only loaded on explicit help calls (cached 5min)`);
+  console.log(`  • Total "always on" cost: ${alwaysLoaded} tokens`);
 
   // TOON savings calculation
   const jsonTokens = measurements.find(m => m.component.includes('JSON'))?.tokens || 0;

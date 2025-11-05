@@ -86,20 +86,26 @@ Three tools:
 
 Agent handles intelligence (understanding intent, picking modules), we handle data fetching and code operations.
 
-**Token Overhead**
+**Token Overhead - Practical Usage**
 
-[TOON encoding](https://github.com/johannschopplich/toon) + ultra-condensed tool descriptions:
+When you add ICP-MCP to your Claude Code config, here's exactly what it costs:
 
-| Component | Tokens | Notes |
-|-----------|--------|-------|
-| Query tool description | 60 | Brief summary + help pointer |
-| Action tool description | 80 | Brief summary + help pointer |
-| Help tool description | 45 | Brief summary |
-| **Total (always loaded)** | **185** | **90% reduction from v0.9.3** |
-| Help responses (cached) | ~3,500 | On-demand, cached 5 min |
-| Module index (TOON) | 568 | Included in help responses |
+| Component | Tokens | When Loaded |
+|-----------|--------|-------------|
+| Query tool description | 59 | Always (MCP available) |
+| Action tool description | 74 | Always (MCP available) |
+| Help tool description | 48 | Always (MCP available) |
+| **Base Cost** | **181** | **Always loaded** |
+| Module index (TOON) | 568 | Only when using `list-all` or help |
+| Help responses | ~3,500 | Only when calling help (cached 5 min) |
 
-**Optimization**: Tool descriptions condensed 90% (1,850 → 185 tokens). Detailed documentation moved to help tool responses which are fetched on-demand and cached, making them near-zero cost after first call.
+**What this means for you:**
+- **181 tokens** constant overhead when MCP is configured
+- Module index (568 tokens) only loaded when you browse modules or request help
+- Help documentation (~3,500 tokens) only loaded on-demand and cached
+- [TOON encoding](https://github.com/johannschopplich/toon) reduces response sizes by 50-65%
+
+**Optimization achieved**: 90% reduction from v0.9.3 (1,850 → 181 tokens base cost). Detailed docs moved to on-demand help responses.
 
 **Query Operations**
 
