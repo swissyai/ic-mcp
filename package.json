@@ -11,7 +11,7 @@
   "scripts": {
     "build": "tsc",
     "postbuild": "chmod +x dist/index.js",
-    "prepublishOnly": "npm run build && npm run measure-tokens",
+    "prepublishOnly": "bash scripts/verify-version-alignment.sh && npm run build && npm run measure-tokens",
     "measure-tokens": "tsx src/utils/measure-tokens.ts",
     "dev": "tsx src/index.ts",
     "start": "node dist/index.js",
