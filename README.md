@@ -114,8 +114,6 @@ Agent handles intelligence (understanding intent, picking modules), we handle da
 - With filtering: `filter: {mode: 'signatures-only'}` → **75 tokens** (96.7% reduction)
 - With code execution: Process in sandbox → **40 tokens** (98.2% reduction)
 
-See [CODE_EXECUTION_EXAMPLES.md](docs/CODE_EXECUTION_EXAMPLES.md) for real-world examples.
-
 **Optimization strategies:**
 1. Use `filter` parameter in queries to reduce data size
 2. Use `icp/execute` for multi-step pipelines to avoid passing intermediate results through model
@@ -133,26 +131,76 @@ Three simple operations with optional filtering:
 
 **Code Execution**
 
-Run TypeScript in sandbox with access to tools:
+Run TypeScript in sandbox with access to tools. Data filtering happens in execution environment instead of passing large payloads through model context.
+
+Example: Find iterator functions in Array module
 ```javascript
-// Example: Find modules with specific functions
+// Fetch docs and filter in sandbox (not through model)
 const docs = await queryTool.execute({
   operation: 'document',
-  modules: ['Array', 'Buffer'],
-  filter: {mode: 'signatures-only'}
+  modules: ['Array']
 });
 
-const hasFilter = docs.modules.filter(m =>
-  m.content.includes('filter')
+const iterFns = helpers.extractFunctionSignatures(docs.modules[0].content)
+  .filter(sig => sig.includes('Iter'));
+
+return iterFns;
+// Returns ~200 chars (50 tokens) vs 3000 chars (750 tokens) for full docs
+// 93% reduction
+```
+
+Example: Multi-module comparison
+```javascript
+const modules = ['Array', 'Buffer', 'HashMap'];
+const docs = await queryTool.execute({
+  operation: 'document',
+  modules,
+  filter: {mode: 'signatures-only', maxLength: 1000}
+});
+
+const comparison = docs.modules.map(m => ({
+  module: m.module,
+  functionCount: m.content.split('\n').filter(l => l.includes('func')).length
+}));
+
+return comparison;
+// Returns ~150 chars (40 tokens) vs 9000 chars (2250 tokens)
+// 98% reduction
+```
+
+Example: Validation pipeline
+```javascript
+const snippets = [
+  {name: 'actor1', code: 'actor { public func greet() : async Text { "Hi" } }'},
+  {name: 'actor2', code: 'actor { public func add(x : Nat) : Nat { x + 1 } }'}
+];
+
+const validations = await Promise.all(
+  snippets.map(s =>
+    actionTool.execute({
+      action: 'validate Motoko code',
+      context: {code: s.code, language: 'motoko'}
+    })
+  )
 );
 
-return hasFilter; // Only returns filtered results to model
+// Return only errors
+const errors = validations
+  .filter(v => v.result.errors?.length > 0)
+  .map(v => ({snippet: v.name, errors: v.result.errors.map(e => e.message)}));
+
+return errors.length > 0 ? errors : {status: 'All valid'};
+// Returns ~150 chars (40 tokens) vs 2000 chars (500 tokens)
+// 92% reduction
 ```
 
 Available in sandbox:
 - `queryTool.execute(args)` - Call query tool
 - `actionTool.execute(args)` - Call action tool
-- `helpers.*` - Utilities (extractFunctionSignatures, filterByKeyword, etc.)
+- `helpers.extractFunctionSignatures(markdown)` - Parse function signatures
+- `helpers.filterByKeyword(items, keyword, field?)` - Filter arrays
+- `helpers.extractCodeBlocks(markdown, language?)` - Extract code blocks
+- `helpers.groupBy(items, getKey)` - Group arrays by field
 
 **Validation**
 
