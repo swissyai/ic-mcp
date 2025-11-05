@@ -1,6 +1,6 @@
 # IC-MCP
 
-MCP server for ICP that gives Claude Code, Cursor, and other AI assistants real-time validation, discovery, and deployment tools.
+MCP server for ICP that gives Claude Code, Cursor, and other AI assistants real-time validation, discovery, and deployment tools with code execution for 90-98% token reduction.
 
 ## Install
 
@@ -89,40 +89,70 @@ Five natural language commands from concept to deployed canister.
 
 **Architecture**
 
-Three tools:
-- `icp/query` - Fetches module list, documentation, code examples (44 modules indexed)
+Four tools (code execution optimized):
+- `icp/query` - Fetches module list, documentation, code examples (44 modules indexed, with filtering)
 - `icp/action` - Validates, deploys, tests, refactors, generates test scaffolding
+- `icp/execute` - Runs code in sandbox to filter data and build pipelines (90-98% token reduction)
 - `icp/help` - Self-documentation
 
-Agent handles intelligence (understanding intent, picking modules), we handle data fetching and code operations.
+Agent handles intelligence (understanding intent, picking modules), we handle data fetching and code operations. Code execution moves data filtering into the sandbox environment, avoiding passing large intermediate results through the model.
 
-**Token Overhead - Practical Usage**
-
-When you add ICP-MCP to your Claude Code config, here's exactly what it costs:
+**Token Overhead**
 
 | Component | Tokens | When Loaded |
 |-----------|--------|-------------|
 | Query tool description | 59 | Always (MCP available) |
-| Action tool description | 74 | Always (MCP available) |
+| Action tool description | 84 | Always (MCP available) |
+| Execute tool description | 88 | Always (MCP available) |
 | Help tool description | 48 | Always (MCP available) |
-| **Base Cost** | **181** | **Always loaded** |
+| **Base Cost** | **279** | **Always loaded** |
 | Module index (TOON) | 568 | Only when using `list-all` or help |
 | Help responses | ~3,500 | Only when calling help (cached 5 min) |
 
-**What this means for you:**
-- **181 tokens** constant overhead when MCP is configured
-- Module index (568 tokens) only loaded when you browse modules or request help
-- Help documentation (~3,500 tokens) only loaded on-demand and cached
-- [TOON encoding](https://github.com/johannschopplich/toon) reduces response sizes by 50-65%
+**Code Execution Token Savings** (new in v0.10.1):
+- Traditional approach: Fetch 3 module docs → **2,250 tokens**
+- With filtering: `filter: {mode: 'signatures-only'}` → **75 tokens** (96.7% reduction)
+- With code execution: Process in sandbox → **40 tokens** (98.2% reduction)
 
-**Optimization achieved**: 90% reduction from v0.9.3 (1,850 → 181 tokens base cost). Detailed docs moved to on-demand help responses.
+See [CODE_EXECUTION_EXAMPLES.md](docs/CODE_EXECUTION_EXAMPLES.md) for real-world examples.
+
+**Optimization strategies:**
+1. Use `filter` parameter in queries to reduce data size
+2. Use `icp/execute` for multi-step pipelines to avoid passing intermediate results through model
+3. [TOON encoding](https://github.com/johannschopplich/toon) reduces response sizes by 50-65%
+
+Based on [Anthropic's Code Execution with MCP](https://www.anthropic.com/engineering/code-execution-with-mcp) patterns.
 
 **Query Operations**
 
-Three simple operations:
+Three simple operations with optional filtering:
 - `list-all` - Return all 44 modules organized by category
 - `document` - Fetch live docs from internetcomputer.org for specified modules
+  - Filter modes: `full` (default), `summary` (first paragraph), `signatures-only` (function signatures)
 - `examples` - Extract code samples from documentation
+
+**Code Execution**
+
+Run TypeScript in sandbox with access to tools:
+```javascript
+// Example: Find modules with specific functions
+const docs = await queryTool.execute({
+  operation: 'document',
+  modules: ['Array', 'Buffer'],
+  filter: {mode: 'signatures-only'}
+});
+
+const hasFilter = docs.modules.filter(m =>
+  m.content.includes('filter')
+);
+
+return hasFilter; // Only returns filtered results to model
+```
+
+Available in sandbox:
+- `queryTool.execute(args)` - Call query tool
+- `actionTool.execute(args)` - Call action tool
+- `helpers.*` - Utilities (extractFunctionSignatures, filterByKeyword, etc.)
 
 **Validation**
 

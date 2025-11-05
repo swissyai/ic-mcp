@@ -14,6 +14,12 @@ export const QueryInputSchema = z.object({
   operation: z.enum(['list-all', 'document', 'examples']).describe('What to fetch'),
   modules: z.array(z.string()).optional().describe('Module names (for document/examples)'),
   format: z.enum(['toon', 'json', 'markdown']).optional().default('toon'),
+  filter: z.object({
+    mode: z.enum(['full', 'summary', 'signatures-only']).optional().default('full')
+      .describe('Content filtering mode: full (default), summary (first paragraph), signatures-only (function signatures only)'),
+    maxLength: z.number().optional()
+      .describe('Maximum characters per module (default: 3000 for full, 500 for summary)'),
+  }).optional().describe('Data filtering options to reduce token usage'),
 });
 
 export type QueryInput = z.infer<typeof QueryInputSchema>;
@@ -31,10 +37,10 @@ export async function query(input: QueryInput) {
       result = await listAllModules();
       break;
     case 'document':
-      result = await fetchDocumentation(input.modules || []);
+      result = await fetchDocumentation(input.modules || [], input.filter);
       break;
     case 'examples':
-      result = await fetchExamples(input.modules || []);
+      result = await fetchExamples(input.modules || [], input.filter?.maxLength);
       break;
   }
 
@@ -70,9 +76,37 @@ async function listAllModules() {
 }
 
 /**
+ * Extract function signatures from markdown documentation
+ */
+function extractFunctionSignatures(markdown: string): string[] {
+  const signatures: string[] = [];
+
+  // Match function/value signatures in documentation
+  // Pattern: "public func name(...) : Type" or "public let name : Type"
+  const funcRegex = /(?:public|private)?\s*(?:func|let|var|class|type)\s+\w+[^;\n]*/g;
+  const matches = markdown.match(funcRegex);
+
+  if (matches) {
+    signatures.push(...matches.map(m => m.trim()));
+  }
+
+  // Also extract from code blocks
+  const codeBlockRegex = /```motoko\n([\s\S]*?)```/g;
+  let match;
+  while ((match = codeBlockRegex.exec(markdown)) !== null) {
+    const codeSignatures = match[1].match(funcRegex);
+    if (codeSignatures) {
+      signatures.push(...codeSignatures.map(s => s.trim()));
+    }
+  }
+
+  return [...new Set(signatures)]; // Remove duplicates
+}
+
+/**
  * Fetch documentation for specified modules
  */
-async function fetchDocumentation(moduleNames: string[]) {
+async function fetchDocumentation(moduleNames: string[], filter?: QueryInput['filter']) {
   if (moduleNames.length === 0) {
     return {
       operation: 'document',
@@ -122,10 +156,27 @@ async function fetchDocumentation(moduleNames: string[]) {
           const contentMatch = markdown.match(/# [\s\S]*?(?=\n##|$)/);
           const cleanContent = contentMatch ? contentMatch[0] : markdown.slice(0, 2000);
 
+          // Apply filtering based on mode
+          let finalContent = cleanContent;
+          const mode = filter?.mode || 'full';
+          const maxLength = filter?.maxLength || (mode === 'summary' ? 500 : 3000);
+
+          if (mode === 'signatures-only') {
+            const signatures = extractFunctionSignatures(cleanContent);
+            finalContent = signatures.length > 0
+              ? `# ${m.name}\n\n${signatures.join('\n')}`
+              : 'No function signatures found';
+          } else if (mode === 'summary') {
+            // Extract first paragraph or section
+            const firstParagraph = cleanContent.split('\n\n')[0];
+            finalContent = firstParagraph;
+          }
+
           return {
             ...m,
-            content: cleanContent.slice(0, 3000),
+            content: finalContent.slice(0, maxLength),
             source: m.docUrl,
+            filterMode: mode,
           };
         } catch (error: any) {
           logger.warn(`Failed to fetch ${m.name} docs: ${error.message}`);
@@ -158,7 +209,7 @@ async function fetchDocumentation(moduleNames: string[]) {
 /**
  * Fetch code examples for specified modules
  */
-async function fetchExamples(moduleNames: string[]) {
+async function fetchExamples(moduleNames: string[], maxLength?: number) {
   if (moduleNames.length === 0) {
     return {
       operation: 'examples',
@@ -166,6 +217,8 @@ async function fetchExamples(moduleNames: string[]) {
       suggestion: 'Provide module names to fetch examples',
     };
   }
+
+  const exampleLimit = maxLength ? Math.max(1, Math.floor(maxLength / 200)) : 3; // Estimate ~200 chars per example
 
   const modules = moduleNames
     .map(name => {
@@ -214,9 +267,10 @@ async function fetchExamples(moduleNames: string[]) {
 
           return {
             module: m.name,
-            examples: codeBlocks.slice(0, 3),
+            examples: codeBlocks.slice(0, exampleLimit),
             source: m.docUrl,
             hasExamples: codeBlocks.length > 0,
+            totalExamples: codeBlocks.length,
           };
         } catch (error: any) {
           logger.warn(`Failed to fetch ${m.name} examples: ${error.message}`);

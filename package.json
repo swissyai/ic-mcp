@@ -1,6 +1,6 @@
 {
   "name": "ic-mcp",
-  "version": "0.10.0",
+  "version": "0.11.0",
   "description": "Model Context Protocol server for Internet Computer development with natural language tools and TOON encoding",
   "type": "module",
   "main": "dist/index.js",
