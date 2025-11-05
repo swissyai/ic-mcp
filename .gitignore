@@ -7,9 +7,9 @@ dist/
 .npm
 .eslintcache
 
-# Test files
-audit-*.ts
-test-*.ts
+# Test files (only in tests/ directory, not src/tools/ helpers)
+/tests/**/*.test.ts
+/audit-*.ts
 
 # Documentation
 *.md

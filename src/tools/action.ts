@@ -14,6 +14,7 @@ import { executeTestDeploy, testDeploySchema } from './test-deploy.js';
 import { executeRefactor, refactorSchema } from './refactor.js';
 import { executeAnalyzeProject, analyzeProjectSchema } from './analyze-project.js';
 import { executeCheckUpgrade, checkUpgradeSchema } from './check-upgrade.js';
+import { executeGenerateTests, generateTestsSchema } from './generate-tests.js';
 
 // Input schema for the action tool
 export const ActionInputSchema = z.object({
@@ -26,12 +27,13 @@ export type ActionInput = z.infer<typeof ActionInputSchema>;
 
 // Action intent types
 type ActionType =
-  | 'validate'      // Code validation (Candid, Motoko, Rust, dfx.json)
-  | 'test'          // Test canister methods
-  | 'deploy'        // Deploy to local/playground
-  | 'refactor'      // Code refactoring
-  | 'analyze'       // Project analysis
-  | 'check-upgrade' // Upgrade safety check
+  | 'validate'       // Code validation (Candid, Motoko, Rust, dfx.json)
+  | 'test'           // Test canister methods
+  | 'deploy'         // Deploy to local/playground
+  | 'refactor'       // Code refactoring
+  | 'analyze'        // Project analysis
+  | 'check-upgrade'  // Upgrade safety check
+  | 'generate-tests' // Generate unit test scaffolding
   | 'unknown';
 
 interface ParsedAction {
@@ -93,6 +95,9 @@ export async function action(input: ActionInput) {
         break;
       case 'check-upgrade':
         result = await handleCheckUpgrade(parsed.params, input.context);
+        break;
+      case 'generate-tests':
+        result = await handleGenerateTests(parsed.params, input.context);
         break;
       default:
         throw new Error(`Unsupported action type: ${parsed.type}`);
@@ -215,6 +220,15 @@ function parseActionIntent(action: string, context?: any): ParsedAction {
       type: 'check-upgrade',
       confidence: 0.85,
       params: extractUpgradeParams(a, context),
+    };
+  }
+
+  // Generate tests patterns (0.9: clear test generation intent)
+  if (/\b(generate|create|write|add)\b.*\b(test|unit test|test coverage|test file)/i.test(a)) {
+    return {
+      type: 'generate-tests',
+      confidence: 0.9,
+      params: extractGenerateTestsParams(a, context),
     };
   }
 
@@ -372,6 +386,35 @@ function extractUpgradeParams(_action: string, context?: any): any {
 }
 
 /**
+ * Extract test generation parameters
+ */
+function extractGenerateTestsParams(action: string, context?: any): any {
+  const params: any = {};
+
+  // Extract module name
+  const moduleMatch = action.match(/\b(module|for)\s+(\w+)/i);
+  if (moduleMatch) params.moduleName = moduleMatch[2];
+
+  // Extract function name
+  const functionMatch = action.match(/\bfunction\s+(\w+)/i);
+  if (functionMatch) params.functionName = functionMatch[1];
+
+  // Extract coverage level
+  if (/\b(minimal|basic)\b/i.test(action)) params.coverage = 'minimal';
+  else if (/\b(comprehensive|complete|full|extensive)\b/i.test(action))
+    params.coverage = 'comprehensive';
+  else params.coverage = 'standard';
+
+  // Get parameters from context
+  if (context?.code) params.code = context.code;
+  if (context?.moduleName) params.moduleName = context.moduleName;
+  if (context?.functionName) params.functionName = context.functionName;
+  if (context?.coverage) params.coverage = context.coverage;
+
+  return params;
+}
+
+/**
  * Handle validation action
  */
 async function handleValidate(params: any, _context?: any) {
@@ -503,11 +546,36 @@ async function handleCheckUpgrade(params: any, _context?: any) {
   return await executeCheckUpgrade(validated.data);
 }
 
+/**
+ * Handle test generation action
+ */
+async function handleGenerateTests(params: any, _context?: any) {
+  // Validate required parameters
+  const validated = generateTestsSchema.safeParse(params);
+
+  if (!validated.success) {
+    return {
+      error: 'Missing required parameters for test generation',
+      required: 'code (Motoko source)',
+      example: {
+        action: 'generate tests for my Array module',
+        context: {
+          code: 'public func find<T>(arr : [T], predicate : T -> Bool) : ?T { ... }',
+          moduleName: 'Array',
+          coverage: 'standard',
+        },
+      },
+    };
+  }
+
+  return await executeGenerateTests(validated.data);
+}
+
 // Export for use in main index
 export const actionTool = {
   name: 'icp/action',
   description:
-    'Execute ICP development operations: validate code (Motoko/Rust/Candid/dfx.json), test canister methods, deploy to local/playground networks, refactor code (add upgrade hooks, stable vars, auth), analyze project structure, and check Candid interface upgrade safety. Use icp/help section=\'action\' for detailed examples, workflows, and best practices.',
+    'Execute ICP development operations: validate code (Motoko/Rust/Candid/dfx.json), test canister methods, deploy to local/playground networks, refactor code (add upgrade hooks, stable vars, auth), analyze project structure, check Candid interface upgrade safety, and generate unit test scaffolding following mo:test patterns. Use icp/help section=\'action\' for detailed examples, workflows, and best practices.',
   inputSchema: ActionInputSchema,
   execute: action,
 };
