@@ -184,6 +184,11 @@ async function measureAll() {
   console.log('  • Total overhead leaves 196k+ tokens for actual work');
   console.log('  • Natural language interface eliminates memorization overhead');
   console.log('\n');
+
+  process.exit(0);
 }
 
-measureAll().catch(console.error);
+measureAll().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});
