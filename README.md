@@ -51,6 +51,16 @@ Modernize code automatically:
 
 Supports both Motoko and Rust. Tracks changes, shows exactly what was modified.
 
+### Test Generation
+
+Generate unit test scaffolding for Motoko code:
+```
+"Generate tests for this Counter module"
+"Create comprehensive test coverage for the transfer function"
+```
+
+Follows mo:test patterns, extracts function signatures, generates test cases with proper assertions. Three coverage levels: minimal, standard, comprehensive.
+
 ## Workflow Example
 
 Building a token canister:
@@ -81,7 +91,7 @@ Five natural language commands from concept to deployed canister.
 
 Three tools:
 - `icp/query` - Fetches module list, documentation, code examples (44 modules indexed)
-- `icp/action` - Validates, deploys, tests, refactors
+- `icp/action` - Validates, deploys, tests, refactors, generates test scaffolding
 - `icp/help` - Self-documentation
 
 Agent handles intelligence (understanding intent, picking modules), we handle data fetching and code operations.
@@ -163,6 +173,7 @@ npm test
 - Candid interface compatibility checking
 - Upgrade safety analysis
 - Code refactoring (Motoko and Rust)
+- Unit test generation (mo:test patterns)
 - dfx deployment automation
 - Method testing with Candid encoding
 
