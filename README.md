@@ -1,20 +1,24 @@
 # IC-MCP
 
-MCP server for ICP that gives Claude Code, Cursor, and other AI assistants real-time validation, discovery, and deployment tools with code execution for 90-98% token reduction.
+MCP server for Internet Computer development. Natural language tools for module discovery, validation, deployment, refactoring, and test generation.
 
-## Quick Start
+**Features:** 47 mo:core modules • Real compiler validation • Upgrade safety checks • Test generation • 90-98% token reduction
 
-**Claude Code**
+---
+
+## Install
+
+### Claude Code
 ```bash
 claude mcp add --scope user --transport stdio ic-mcp -- npx -y ic-mcp
 ```
 
-**Codex**
+### Codex
 ```bash
 codex mcp add ic-mcp -- npx -y ic-mcp
 ```
 
-**Cursor**
+### Cursor
 ```json
 {
   "mcpServers": {
@@ -26,58 +30,60 @@ codex mcp add ic-mcp -- npx -y ic-mcp
 }
 ```
 
+---
+
 ## Usage
 
-**Find modules without leaving editor**
+### Find modules
 ```
 "What modules handle token balances?"
 "Show me HashMap examples"
 ```
 Searches 47 mo:core modules, fetches live docs from internetcomputer.org.
 
-**Generate test scaffolding**
+### Generate tests
 ```
 "Generate tests for this Counter module"
 ```
 Creates mo:test structure, extracts function signatures, minimal/standard/comprehensive coverage.
 
-**Catch errors before deployment**
+### Validate code
 ```
 "Validate this Motoko code"
 ```
 Uses moc compiler, not pattern matching. Immediate feedback instead of deploy-wait-error cycle.
 
-**Check upgrade safety**
+### Check upgrade safety
 ```
 "Is this refactor upgrade-safe?"
 "Add upgrade hooks to this canister"
 ```
 Analyzes Candid interface changes, prevents state loss from incompatible upgrades.
 
-**Deploy and test**
+### Deploy and test
 ```
 "Deploy to local dfx"
 "Test the transfer method with 1000 tokens to principal xyz..."
 ```
 Handles dfx commands, Candid encoding, identity management.
 
+---
+
 ## Technical
 
-**Tools**
-- `icp/query` - Module search, documentation, examples (47 mo:core modules)
-- `icp/action` - Validate, deploy, test, refactor, generate tests
-- `icp/execute` - Run code in sandbox for data filtering (90-98% token reduction)
-- `icp/help` - Documentation
+| Tool | Purpose |
+|------|---------|
+| `icp/query` | Module search, documentation, examples (47 mo:core modules) |
+| `icp/action` | Validate, deploy, test, refactor, generate tests |
+| `icp/execute` | Run code in sandbox for data filtering (90-98% token reduction) |
+| `icp/help` | Documentation |
 
-**Validation**
+**Validation:**
 - Motoko: moc compiler with dependency resolution
 - Candid: didc validator with subtype checking
 - Rust: ic-cdk pattern analysis
 
-**Requirements**
-- Node.js 18+
-- dfx CLI (for deployment)
-- moc compiler (for Motoko validation)
+**Requirements:** Node.js 18+ • dfx CLI • moc compiler
 
 ## Development
 
