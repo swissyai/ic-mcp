@@ -2,221 +2,19 @@
 
 MCP server for ICP that gives Claude Code, Cursor, and other AI assistants real-time validation, discovery, and deployment tools with code execution for 90-98% token reduction.
 
-## Install
+## Quick Start
 
+**Claude Code**
 ```bash
 claude mcp add --scope user --transport stdio ic-mcp -- npx -y ic-mcp
 ```
 
-## Use
-
-### Discovery
-
-Ask about modules:
-```
-"What data structures does ICP have?"
-"How do I handle random numbers?"
-"Show me Map examples"
+**Codex**
+```bash
+codex mcp add ic-mcp -- npx -y ic-mcp
 ```
 
-Agent picks relevant modules from the index, we fetch live documentation and code examples from internetcomputer.org.
-
-### Validation
-
-Catch errors before deployment:
-```
-"Validate this Motoko code: actor { public func greet() : async Text { \"Hello\" } }"
-```
-
-Uses moc compiler for Motoko, pattern checks for Rust, interface validation for Candid. Real compilation, not heuristics.
-
-### Deployment
-
-Ship to local or playground networks:
-```
-"Deploy this to local dfx network"
-"Test the transfer method with 1000 tokens"
-```
-
-Handles dfx commands, manages identities, tests canister methods with proper Candid encoding.
-
-### Refactoring
-
-Modernize code automatically:
-```
-"Add upgrade hooks to this canister"
-"Convert variables to stable storage"
-"Add caller authentication"
-```
-
-Supports both Motoko and Rust. Tracks changes, shows exactly what was modified.
-
-### Test Generation
-
-Generate unit test scaffolding for Motoko code:
-```
-"Generate tests for this Counter module"
-"Create comprehensive test coverage for the transfer function"
-```
-
-Follows mo:test patterns, extracts function signatures, generates test cases with proper assertions. Three coverage levels: minimal, standard, comprehensive.
-
-## Workflow Example
-
-Building a token canister:
-```
-"What modules do I need for a token canister?"
-  → Agent picks: Map, Principal, Nat
-
-"Show me Map examples"
-  → We fetch live docs from internetcomputer.org
-
-[Write implementation]
-
-"Validate this Motoko code"
-  → moc compiler checks, catch errors
-
-"Deploy to local dfx network"
-  → Automated deployment
-
-"Test the transfer method with 1000 tokens to principal abc..."
-  → Execute and verify
-```
-
-Five natural language commands from concept to deployed canister.
-
-## Technical
-
-**Architecture**
-
-Four tools (code execution optimized):
-- `icp/query` - Fetches module list, documentation, code examples (44 modules indexed, with filtering)
-- `icp/action` - Validates, deploys, tests, refactors, generates test scaffolding
-- `icp/execute` - Runs code in sandbox to filter data and build pipelines (90-98% token reduction)
-- `icp/help` - Self-documentation
-
-Agent handles intelligence (understanding intent, picking modules), we handle data fetching and code operations. Code execution moves data filtering into the sandbox environment, avoiding passing large intermediate results through the model.
-
-**Token Overhead**
-
-| Component | Tokens | When Loaded |
-|-----------|--------|-------------|
-| Query tool description | 59 | Always (MCP available) |
-| Action tool description | 84 | Always (MCP available) |
-| Execute tool description | 88 | Always (MCP available) |
-| Help tool description | 48 | Always (MCP available) |
-| **Base Cost** | **279** | **Always loaded** |
-| Module index (TOON) | 568 | Only when using `list-all` or help |
-| Help responses | ~3,500 | Only when calling help (cached 5 min) |
-
-**Code Execution Token Savings** (new in v0.10.1):
-- Traditional approach: Fetch 3 module docs → **2,250 tokens**
-- With filtering: `filter: {mode: 'signatures-only'}` → **75 tokens** (96.7% reduction)
-- With code execution: Process in sandbox → **40 tokens** (98.2% reduction)
-
-**Optimization strategies:**
-1. Use `filter` parameter in queries to reduce data size
-2. Use `icp/execute` for multi-step pipelines to avoid passing intermediate results through model
-3. [TOON encoding](https://github.com/johannschopplich/toon) reduces response sizes by 50-65%
-
-Based on [Anthropic's Code Execution with MCP](https://www.anthropic.com/engineering/code-execution-with-mcp) patterns.
-
-**Query Operations**
-
-Three simple operations with optional filtering:
-- `list-all` - Return all 44 modules organized by category
-- `document` - Fetch live docs from internetcomputer.org for specified modules
-  - Filter modes: `full` (default), `summary` (first paragraph), `signatures-only` (function signatures)
-- `examples` - Extract code samples from documentation
-
-**Code Execution**
-
-Run TypeScript in sandbox with access to tools. Data filtering happens in execution environment instead of passing large payloads through model context.
-
-Example: Find iterator functions in Array module
-```javascript
-// Fetch docs and filter in sandbox (not through model)
-const docs = await queryTool.execute({
-  operation: 'document',
-  modules: ['Array']
-});
-
-const iterFns = helpers.extractFunctionSignatures(docs.modules[0].content)
-  .filter(sig => sig.includes('Iter'));
-
-return iterFns;
-// Returns ~200 chars (50 tokens) vs 3000 chars (750 tokens) for full docs
-// 93% reduction
-```
-
-Example: Multi-module comparison
-```javascript
-const modules = ['Array', 'Buffer', 'HashMap'];
-const docs = await queryTool.execute({
-  operation: 'document',
-  modules,
-  filter: {mode: 'signatures-only', maxLength: 1000}
-});
-
-const comparison = docs.modules.map(m => ({
-  module: m.module,
-  functionCount: m.content.split('\n').filter(l => l.includes('func')).length
-}));
-
-return comparison;
-// Returns ~150 chars (40 tokens) vs 9000 chars (2250 tokens)
-// 98% reduction
-```
-
-Example: Validation pipeline
-```javascript
-const snippets = [
-  {name: 'actor1', code: 'actor { public func greet() : async Text { "Hi" } }'},
-  {name: 'actor2', code: 'actor { public func add(x : Nat) : Nat { x + 1 } }'}
-];
-
-const validations = await Promise.all(
-  snippets.map(s =>
-    actionTool.execute({
-      action: 'validate Motoko code',
-      context: {code: s.code, language: 'motoko'}
-    })
-  )
-);
-
-// Return only errors
-const errors = validations
-  .filter(v => v.result.errors?.length > 0)
-  .map(v => ({snippet: v.name, errors: v.result.errors.map(e => e.message)}));
-
-return errors.length > 0 ? errors : {status: 'All valid'};
-// Returns ~150 chars (40 tokens) vs 2000 chars (500 tokens)
-// 92% reduction
-```
-
-Available in sandbox:
-- `queryTool.execute(args)` - Call query tool
-- `actionTool.execute(args)` - Call action tool
-- `helpers.extractFunctionSignatures(markdown)` - Parse function signatures
-- `helpers.filterByKeyword(items, keyword, field?)` - Filter arrays
-- `helpers.extractCodeBlocks(markdown, language?)` - Extract code blocks
-- `helpers.groupBy(items, getKey)` - Group arrays by field
-
-**Validation**
-
-Uses actual compilers, not pattern matching:
-- Motoko: moc compiler with dependency resolution
-- Candid: didc validator with subtype checking
-- Rust: ic-cdk pattern analysis
-
-**Module Index**
-
-44 Motoko base library modules compressed (`n`, `d`, `c`, `p`) and expanded on-demand. All modules listed in tool description for agent to reference.
-
-## Configuration
-
-For Claude Desktop or similar clients, add to MCP config:
-
+**Cursor**
 ```json
 {
   "mcpServers": {
@@ -228,9 +26,58 @@ For Claude Desktop or similar clients, add to MCP config:
 }
 ```
 
-Config location varies by client:
-- Claude Desktop: `~/Library/Application Support/Claude/claude_desktop_config.json`
-- Cline/Continue: See client documentation
+## Usage
+
+**Find modules without leaving editor**
+```
+"What modules handle token balances?"
+"Show me HashMap examples"
+```
+Searches 44 base library modules, fetches live docs from internetcomputer.org.
+
+**Generate test scaffolding**
+```
+"Generate tests for this Counter module"
+```
+Creates mo:test structure, extracts function signatures, minimal/standard/comprehensive coverage.
+
+**Catch errors before deployment**
+```
+"Validate this Motoko code"
+```
+Uses moc compiler, not pattern matching. Immediate feedback instead of deploy-wait-error cycle.
+
+**Check upgrade safety**
+```
+"Is this refactor upgrade-safe?"
+"Add upgrade hooks to this canister"
+```
+Analyzes Candid interface changes, prevents state loss from incompatible upgrades.
+
+**Deploy and test**
+```
+"Deploy to local dfx"
+"Test the transfer method with 1000 tokens to principal xyz..."
+```
+Handles dfx commands, Candid encoding, identity management.
+
+## Technical
+
+**Tools**
+- `icp/query` - Module search, documentation, examples (44 modules indexed)
+- `icp/action` - Validate, deploy, test, refactor, generate tests
+- `icp/execute` - Run code in sandbox for data filtering (90-98% token reduction)
+- `icp/help` - Documentation
+
+**Validation**
+- Motoko: moc compiler with dependency resolution
+- Candid: didc validator with subtype checking
+- Rust: ic-cdk pattern analysis
+
+**Requirements**
+- Node.js 18+
+- dfx CLI (for deployment)
+- moc compiler (for Motoko validation)
 
 ## Development
 
@@ -242,25 +89,8 @@ npm run build
 npm test
 ```
 
-## Reference
+## Links
 
-**Capabilities**
-- 44 Motoko base library modules indexed
-- Live documentation fetching from internetcomputer.org
-- Real compiler validation (moc, didc)
-- Candid interface compatibility checking
-- Upgrade safety analysis
-- Code refactoring (Motoko and Rust)
-- Unit test generation (mo:test patterns)
-- dfx deployment automation
-- Method testing with Candid encoding
-
-**Requirements**
-- Node.js 18+
-- dfx CLI (for deployment features)
-- moc compiler (for Motoko validation)
-
-**Links**
 - [Internet Computer](https://internetcomputer.org)
 - [Model Context Protocol](https://modelcontextprotocol.io)
 - [GitHub Repository](https://github.com/swissyai/ic-mcp)
