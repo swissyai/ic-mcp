@@ -33,7 +33,7 @@ codex mcp add ic-mcp -- npx -y ic-mcp
 "What modules handle token balances?"
 "Show me HashMap examples"
 ```
-Searches 44 base library modules, fetches live docs from internetcomputer.org.
+Searches 47 mo:core modules, fetches live docs from internetcomputer.org.
 
 **Generate test scaffolding**
 ```
@@ -64,7 +64,7 @@ Handles dfx commands, Candid encoding, identity management.
 ## Technical
 
 **Tools**
-- `icp/query` - Module search, documentation, examples (44 modules indexed)
+- `icp/query` - Module search, documentation, examples (47 mo:core modules)
 - `icp/action` - Validate, deploy, test, refactor, generate tests
 - `icp/execute` - Run code in sandbox for data filtering (90-98% token reduction)
 - `icp/help` - Documentation
