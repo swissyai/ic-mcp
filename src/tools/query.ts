@@ -308,7 +308,7 @@ async function fetchExamples(moduleNames: string[], maxLength?: number) {
 export const queryTool = {
   name: 'icp/query',
   description:
-    'Search and discover ICP modules, fetch live documentation and code examples from internetcomputer.org. Supports semantic search across 44 Motoko base library modules (Data Structures, Primitives, Control, System) with intelligent intent detection. Use icp/help section=\'query\' for detailed usage patterns and examples.',
+    'Search and discover ICP modules, fetch live documentation and code examples from internetcomputer.org. Supports semantic search across 47 Motoko core library modules (Data Structures, Primitives, Utilities, System) with intelligent intent detection. Use icp/help section=\'query\' for detailed usage patterns and examples.',
   inputSchema: QueryInputSchema,
   execute: query,
 };

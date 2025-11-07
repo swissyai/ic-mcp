@@ -287,7 +287,7 @@ Search for relevant modules (no conceptual knowledge base).
 The query tool supports 3 operations:
 
 **1. list-all**
-- Returns all 44 Motoko base modules organized by category
+- Returns all 47 Motoko core modules organized by category
 - Use when: Browsing available modules
 - Example: \`{ operation: "list-all" }\`
 
@@ -308,7 +308,7 @@ The query tool supports 3 operations:
 Behind the scenes workflow:
 
 1. You make a natural language query
-2. Claude identifies relevant module(s) from the 44-module index
+2. Claude identifies relevant module(s) from the 47-module index
 3. Query tool fetches live data from internetcomputer.org
 4. Results returned in TOON format (50% token reduction)
 5. Claude presents information to you
@@ -324,7 +324,7 @@ The tool handles data fetching while Claude handles all intelligence and intent 
 
 ## Module Index
 
-45 Motoko base library modules organized by category:
+47 Motoko core library modules organized by category:
 - **data-structures**: Array, Map, List, Set, Queue, Stack, Tree, Graph
 - **primitives**: Text, Int, Nat, Float, Bool, Char, Blob
 - **utilities**: Option, Result, Iter, Buffer, Random, Order
@@ -867,7 +867,7 @@ List     | data-structures  | 2
 
 | Data Type | JSON Tokens | TOON Tokens | Savings |
 |-----------|-------------|-------------|---------|
-| Module Index (45 modules) | 3000 | 500 | 83% |
+| Module Index (47 modules) | 3000 | 500 | 83% |
 | Use-Case Metadata | 900 | 400 | 55% |
 | Discovery Results (10 items) | 800 | 360 | 45% |
 | **Average** | - | - | **50%** |
