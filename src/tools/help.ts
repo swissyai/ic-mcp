@@ -78,7 +78,7 @@ Give every AI agent ICP superpowers.
 
 ## What is ICP-MCP?
 
-A Model Context Protocol (MCP) server that provides Claude Code and other AI agents with comprehensive Internet Computer development capabilities through 3 unified, intelligent tools.
+A Model Context Protocol (MCP) server that provides Claude Code and other AI agents with comprehensive Internet Computer development capabilities through 4 unified, intelligent tools.
 
 ## Core Philosophy
 
@@ -86,9 +86,9 @@ A Model Context Protocol (MCP) server that provides Claude Code and other AI age
 
 **Natural Language Interface**: All tools understand developer intent through natural language - no need to remember exact command syntax.
 
-**Specialized Intelligence**: Each tool is purpose-built for its domain (knowledge, actions, meta) with deep ICP expertise.
+**Specialized Intelligence**: Each tool is purpose-built for its domain (knowledge, actions, execution, meta) with deep ICP expertise.
 
-## The 3 Tools
+## The 4 Tools
 
 ### 1. icp/query - Knowledge Layer
 **Purpose**: Discover, search, and learn about ICP modules and concepts
@@ -114,7 +114,17 @@ A Model Context Protocol (MCP) server that provides Claude Code and other AI age
 - "analyze project structure"
 - "check if this interface is upgrade-safe"
 
-### 3. icp/help - Meta Layer
+### 3. icp/execute - Code Execution Layer
+**Purpose**: Run TypeScript code in sandbox to filter data and build pipelines (90-98% token reduction)
+
+**Use when**: You need to process large datasets or chain multiple operations without context bloat
+
+**Examples**:
+- Filter 47 modules to find specific categories
+- Extract function signatures from documentation
+- Build multi-step data pipelines
+
+### 4. icp/help - Meta Layer
 **Purpose**: Learn about ICP-MCP itself and get guidance
 
 **Use when**: You're not sure what the MCP can do or need examples
