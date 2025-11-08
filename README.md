@@ -1,6 +1,6 @@
 # IC-MCP
 
-MCP server for Internet Computer development. Natural language tools for module discovery, validation, deployment, refactoring, and test generation.
+MCP server for Internet Computer development with module discovery, validation, deployment, refactoring, and test generation.
 
 **Features:** 47 mo:core modules • Real compiler validation • Upgrade safety checks • Test generation • 90-98% token reduction
 
@@ -39,7 +39,7 @@ codex mcp add ic-mcp -- npx -y ic-mcp
 "What modules handle token balances?"
 "Show me HashMap examples"
 ```
-Searches 47 mo:core modules, fetches live docs from internetcomputer.org.
+Searches 47 mo:core modules + comprehensive internetcomputer.org documentation.
 
 ### Generate tests
 ```
@@ -73,9 +73,9 @@ Handles dfx commands, Candid encoding, identity management.
 
 | Tool | Purpose |
 |------|---------|
-| `icp/query` | Module search, documentation, examples (47 mo:core modules) |
+| `icp/query` | Module search, docs, examples (47 mo:core + internetcomputer.org) |
 | `icp/action` | Validate, deploy, test, refactor, generate tests |
-| `icp/execute` | Run code in sandbox for data filtering (90-98% token reduction) |
+| `icp/execute` | Sandbox for processing data, persistent workspaces (90-98% token reduction) |
 | `icp/help` | Documentation |
 
 **Validation:**
