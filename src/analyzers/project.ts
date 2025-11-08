@@ -7,6 +7,10 @@ import { readFile, readdir } from 'fs/promises';
 import { join, resolve, dirname } from 'path';
 import { existsSync } from 'fs';
 import { logger } from '../utils/logger.js';
+import { exec } from 'child_process';
+import { promisify } from 'util';
+
+const execAsync = promisify(exec);
 
 /**
  * Canister information
@@ -50,6 +54,17 @@ export interface DfxConfig {
 }
 
 /**
+ * Upgradeability assessment
+ */
+export interface UpgradeabilityInfo {
+  mocVersion?: string;
+  eopEnabled: boolean;
+  eopAvailable: boolean;
+  score: 'excellent' | 'good' | 'fair' | 'needs-improvement';
+  recommendations: string[];
+}
+
+/**
  * Complete project structure
  */
 export interface ProjectStructure {
@@ -60,6 +75,7 @@ export interface ProjectStructure {
   networks: string[];
   issues: ProjectIssue[];
   totalLinesOfCode: number;
+  upgradeability?: UpgradeabilityInfo;
 }
 
 /**
@@ -239,6 +255,80 @@ async function analyzeCanister(
 }
 
 /**
+ * Assess upgradeability based on moc version and EOP
+ */
+async function assessUpgradeability(
+  canisters: CanisterInfo[]
+): Promise<UpgradeabilityInfo | undefined> {
+  // Only assess if there are Motoko canisters
+  const hasMotokoCanister = canisters.some(c => c.type === 'motoko');
+  if (!hasMotokoCanister) {
+    return undefined;
+  }
+
+  try {
+    // Try to get moc version from dfx cache
+    const { stdout } = await execAsync('moc --version 2>&1 || $(dfx cache show)/moc --version 2>&1');
+    const versionMatch = stdout.match(/Motoko compiler (\d+\.\d+\.\d+)/);
+    const mocVersion = versionMatch ? versionMatch[1] : undefined;
+
+    // Parse version
+    let eopAvailable = false;
+    let eopEnabled = false;
+
+    if (mocVersion) {
+      const [major, minor] = mocVersion.split('.').map(Number);
+      // EOP available since 0.11.0, default since 0.15.0
+      eopAvailable = major > 0 || (major === 0 && minor >= 11);
+      eopEnabled = major > 0 || (major === 0 && minor >= 15);
+    }
+
+    // Determine score and recommendations
+    const recommendations: string[] = [];
+    let score: UpgradeabilityInfo['score'];
+
+    if (eopEnabled) {
+      score = 'excellent';
+      recommendations.push('✅ Enhanced Orthogonal Persistence (EOP) enabled by default');
+      recommendations.push('Upgrades scale independently of heap size, no manual stable memory needed');
+    } else if (eopAvailable) {
+      score = 'good';
+      recommendations.push('⚡ EOP available but not default in your moc version');
+      recommendations.push('Consider upgrading to moc >= 0.15.0 for EOP by default');
+      recommendations.push('EOP provides faster upgrades that scale with heap size');
+    } else if (mocVersion) {
+      score = 'fair';
+      recommendations.push('⚠️  Using classical persistence (serialization-based)');
+      recommendations.push('Upgrade to moc >= 0.15.0 to enable Enhanced Orthogonal Persistence');
+      recommendations.push('EOP eliminates need for stable variables and scales to large heaps');
+    } else {
+      score = 'needs-improvement';
+      recommendations.push('❌ Could not detect Motoko compiler version');
+      recommendations.push('Ensure moc is installed via dfx');
+    }
+
+    return {
+      mocVersion,
+      eopEnabled,
+      eopAvailable,
+      score,
+      recommendations,
+    };
+  } catch (error: any) {
+    logger.warn(`Failed to assess upgradeability: ${error.message}`);
+    return {
+      eopEnabled: false,
+      eopAvailable: false,
+      score: 'needs-improvement',
+      recommendations: [
+        '❌ Could not detect Motoko compiler',
+        'Install dfx to enable upgradeability assessment',
+      ],
+    };
+  }
+}
+
+/**
  * Detect project-level issues
  */
 function detectProjectIssues(
@@ -322,6 +412,9 @@ export async function analyzeProject(
   // Detect issues
   const issues = detectProjectIssues(dfxConfig, canisters);
 
+  // Assess upgradeability
+  const upgradeability = await assessUpgradeability(canisters);
+
   // Calculate total LOC
   const totalLinesOfCode = canisters.reduce((sum, c) => sum + c.linesOfCode, 0);
 
@@ -336,9 +429,10 @@ export async function analyzeProject(
     networks,
     issues,
     totalLinesOfCode,
+    upgradeability,
   };
 
-  logger.info(`Project analyzed: ${canisters.length} canisters, ${totalLinesOfCode} LOC`);
+  logger.info(`Project analyzed: ${canisters.length} canisters, ${totalLinesOfCode} LOC, upgrade score: ${upgradeability?.score || 'n/a'}`);
 
   return project;
 }

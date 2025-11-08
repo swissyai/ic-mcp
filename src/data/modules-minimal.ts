@@ -13,6 +13,106 @@ export interface MinimalModule {
   p: number;  // priority (1-3)
 }
 
+/**
+ * Platform features (not modules, but queryable documentation)
+ */
+export interface PlatformFeature {
+  n: string;  // name
+  d: string;  // description
+  c: string;  // category
+  u: string;  // URL path (relative to internetcomputer.org)
+  p: number;  // priority (1-3)
+}
+
+export const PLATFORM_FEATURES: PlatformFeature[] = [
+  // Persistence & Upgrades
+  {
+    n: 'EOP',
+    d: 'Enhanced Orthogonal Persistence - default since moc 0.15.0, fast upgrades scaling independently of heap size',
+    c: 'platform/persistence',
+    u: '/docs/motoko/fundamentals/actors/orthogonal-persistence/enhanced',
+    p: 1,
+  },
+  {
+    n: 'Classical-Persistence',
+    d: 'Classical orthogonal persistence - deprecated, uses serialization',
+    c: 'platform/persistence',
+    u: '/docs/motoko/main/canister-maintenance/orthogonal-persistence/classical',
+    p: 3,
+  },
+
+  // Cryptography & Security
+  {
+    n: 'VetKeys',
+    d: 'Verifiably encrypted threshold keys - enables IBE, threshold BLS signatures, decentralized key management',
+    c: 'platform/crypto',
+    u: '/docs/building-apps/network-features/vetkeys/introduction',
+    p: 1,
+  },
+  {
+    n: 'VetKeys-API',
+    d: 'VetKeys API reference for threshold encryption and signing',
+    c: 'platform/crypto',
+    u: '/docs/building-apps/network-features/vetkeys/api',
+    p: 2,
+  },
+
+  // Chain Fusion & Interoperability
+  {
+    n: 'Chain-Fusion',
+    d: 'Multi-chain integration - connect ICP with Bitcoin, Ethereum, and other chains',
+    c: 'platform/interop',
+    u: '/docs/building-apps/multi-chain/',
+    p: 2,
+  },
+  {
+    n: 'Threshold-ECDSA',
+    d: 'Threshold ECDSA signatures for Bitcoin and Ethereum integration',
+    c: 'platform/crypto',
+    u: '/docs/building-apps/network-features/threshold-ecdsa',
+    p: 2,
+  },
+
+  // Performance & Optimization
+  {
+    n: 'Stable-Memory',
+    d: 'Direct stable memory access - for large-scale data storage beyond heap',
+    c: 'platform/memory',
+    u: '/docs/motoko/main/writing-motoko/stable-memory',
+    p: 2,
+  },
+
+  // Best Practices & Migration Guides
+  {
+    n: 'Labeled-Loops',
+    d: 'Loop labels for break/continue - required in Motoko for breaking/continuing loops',
+    c: 'practices/syntax',
+    u: '/docs/motoko/main/base/control-flow#labeled-loops',
+    p: 1,
+  },
+  {
+    n: 'mo-core-Migration',
+    d: 'mo:base to mo:core migration - mo:core is the new standard library (since Aug 2025)',
+    c: 'practices/migration',
+    u: '/docs/motoko/main/base/core-migration',
+    p: 1,
+  },
+  {
+    n: 'List-vs-Buffer',
+    d: 'Use List instead of Buffer - Buffer deprecated, List provides dynamic sizing',
+    c: 'practices/migration',
+    u: '/docs/motoko/main/base/deprecated#buffer',
+    p: 1,
+  },
+  {
+    n: 'Async-Best-Practices',
+    d: 'Async/await patterns and inter-canister calls - error handling and upgrades',
+    c: 'practices/async',
+    u: '/docs/motoko/main/writing-motoko/async-data',
+    p: 2,
+  },
+];
+
 export const MODULES_MINIMAL: MinimalModule[] = [
   // Data Structures - Arrays (Mutable)
   { n: 'Array', d: 'Immutable array utilities', c: 'ds/arr', p: 1 },
@@ -164,6 +264,34 @@ function expandCategory(c: string): string {
  */
 export function getModule(name: string): MinimalModule | undefined {
   return MODULES_MINIMAL.find(m => m.n === name);
+}
+
+/**
+ * Get platform feature by name
+ */
+export function getPlatformFeature(name: string): PlatformFeature | undefined {
+  // Case-insensitive search
+  const normalized = name.toLowerCase();
+  return PLATFORM_FEATURES.find(
+    f => f.n.toLowerCase() === normalized ||
+         f.n.toLowerCase().replace('-', '') === normalized
+  );
+}
+
+/**
+ * Expand platform feature to full format
+ */
+export function expandPlatformFeature(f: PlatformFeature): any {
+  const baseUrl = 'https://internetcomputer.org';
+
+  return {
+    name: f.n,
+    description: f.d,
+    category: f.c,
+    priority: f.p,
+    docUrl: `${baseUrl}${f.u}`,
+    type: 'platform-feature',
+  };
 }
 
 /**

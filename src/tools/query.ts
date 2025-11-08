@@ -5,14 +5,24 @@
 
 import { z } from 'zod';
 import { DataEncoder } from '../core/toon-encoder.js';
-import { MODULES_MINIMAL, expandModule, getModule } from '../data/modules-minimal.js';
+import {
+  MODULES_MINIMAL,
+  PLATFORM_FEATURES,
+  expandModule,
+  getModule,
+  getPlatformFeature,
+  expandPlatformFeature,
+} from '../data/modules-minimal.js';
+import { searchDocs, getAllCategories, type DocEntry } from '../data/dfinity-docs-index.js';
 import { logger } from '../utils/logger.js';
 import { getUserAgent } from '../utils/version.js';
 
 // Input schema - simple and direct
 export const QueryInputSchema = z.object({
-  operation: z.enum(['list-all', 'document', 'examples']).describe('What to fetch'),
+  operation: z.enum(['list-all', 'document', 'examples', 'fetch-url']).describe('What to fetch'),
   modules: z.array(z.string()).optional().describe('Module names (for document/examples)'),
+  url: z.string().optional().describe('Direct URL path to fetch from internetcomputer.org'),
+  query: z.string().optional().describe('Search query for fallback discovery'),
   format: z.enum(['toon', 'json', 'markdown']).optional().default('toon'),
   filter: z.object({
     mode: z.enum(['full', 'summary', 'signatures-only']).optional().default('full')
@@ -28,7 +38,7 @@ export type QueryInput = z.infer<typeof QueryInputSchema>;
  * Main query tool - simplified data fetching
  */
 export async function query(input: QueryInput) {
-  logger.info(`Query: ${input.operation}${input.modules ? ` for ${input.modules.join(', ')}` : ''}`);
+  logger.info(`Query: ${input.operation}${input.modules ? ` for ${input.modules.join(', ')}` : ''}${input.url ? ` url=${input.url}` : ''}${input.query ? ` query="${input.query}"` : ''}`);
 
   let result: any;
 
@@ -37,10 +47,13 @@ export async function query(input: QueryInput) {
       result = await listAllModules();
       break;
     case 'document':
-      result = await fetchDocumentation(input.modules || [], input.filter);
+      result = await fetchDocumentation(input.modules || [], input.filter, input.query);
       break;
     case 'examples':
       result = await fetchExamples(input.modules || [], input.filter?.maxLength);
+      break;
+    case 'fetch-url':
+      result = await fetchArbitraryUrl(input.url || '', input.filter);
       break;
   }
 
@@ -57,20 +70,30 @@ export async function query(input: QueryInput) {
 }
 
 /**
- * List all modules organized by category
+ * List all modules and platform features organized by category
  */
 async function listAllModules() {
   const categories: Record<string, any[]> = {};
 
+  // Add modules
   for (const module of MODULES_MINIMAL) {
     const [cat] = module.c.split('/');
     if (!categories[cat]) categories[cat] = [];
     categories[cat].push(expandModule(module));
   }
 
+  // Add platform features
+  for (const feature of PLATFORM_FEATURES) {
+    const [cat] = feature.c.split('/');
+    if (!categories[cat]) categories[cat] = [];
+    categories[cat].push(expandPlatformFeature(feature));
+  }
+
   return {
     operation: 'list-all',
-    total: MODULES_MINIMAL.length,
+    total: MODULES_MINIMAL.length + PLATFORM_FEATURES.length,
+    modules: MODULES_MINIMAL.length,
+    platformFeatures: PLATFORM_FEATURES.length,
     categories,
   };
 }
@@ -104,29 +127,14 @@ function extractFunctionSignatures(markdown: string): string[] {
 }
 
 /**
- * Fetch documentation for specified modules
+ * Fetch arbitrary URL from internetcomputer.org (Layer 2)
  */
-async function fetchDocumentation(moduleNames: string[], filter?: QueryInput['filter']) {
-  if (moduleNames.length === 0) {
+async function fetchArbitraryUrl(urlPath: string, filter?: QueryInput['filter']): Promise<any> {
+  if (!urlPath) {
     return {
-      operation: 'document',
-      error: 'No modules specified',
-      suggestion: 'Provide module names to fetch documentation',
-    };
-  }
-
-  const modules = moduleNames
-    .map(name => {
-      const mod = getModule(name);
-      return mod ? expandModule(mod) : null;
-    })
-    .filter(Boolean);
-
-  if (modules.length === 0) {
-    return {
-      operation: 'document',
-      error: 'No valid modules found',
-      requested: moduleNames,
+      operation: 'fetch-url',
+      error: 'No URL provided',
+      suggestion: 'Provide a URL path (e.g., "/docs/motoko/main/writing-motoko/modules") or full URL',
     };
   }
 
@@ -134,8 +142,94 @@ async function fetchDocumentation(moduleNames: string[], filter?: QueryInput['fi
     const fetch = (await import('node-fetch')).default;
     const { default: TurndownService } = await import('turndown');
 
-    const docsWithContent = await Promise.all(
-      modules.map(async (m: any) => {
+    // Normalize URL
+    const baseUrl = 'https://internetcomputer.org';
+    const fullUrl = urlPath.startsWith('http') ? urlPath : `${baseUrl}${urlPath}`;
+
+    logger.debug(`Fetching arbitrary URL: ${fullUrl}`);
+    const response = await fetch(fullUrl, {
+      headers: { 'User-Agent': getUserAgent() },
+      signal: AbortSignal.timeout(5000),
+    });
+
+    if (!response.ok) {
+      return {
+        operation: 'fetch-url',
+        error: `HTTP ${response.status} for ${fullUrl}`,
+        url: fullUrl,
+      };
+    }
+
+    const html = await response.text();
+    const turndown = new TurndownService({
+      headingStyle: 'atx',
+      codeBlockStyle: 'fenced',
+    });
+    const markdown = turndown.turndown(html);
+
+    // Apply filtering
+    const mode = filter?.mode || 'full';
+    const maxLength = filter?.maxLength || (mode === 'summary' ? 500 : 3000);
+
+    let content = markdown;
+    if (mode === 'summary') {
+      content = markdown.split('\n\n').slice(0, 2).join('\n\n');
+    }
+
+    return {
+      operation: 'fetch-url',
+      url: fullUrl,
+      content: content.slice(0, maxLength),
+      filterMode: mode,
+    };
+  } catch (error: any) {
+    logger.error(`Failed to fetch URL: ${error.message}`);
+    return {
+      operation: 'fetch-url',
+      error: `Failed to fetch: ${error.message}`,
+      url: urlPath,
+    };
+  }
+}
+
+/**
+ * Fetch documentation for specified modules or platform features
+ * Supports fallback search (Layer 3) if modules not found
+ */
+async function fetchDocumentation(moduleNames: string[], filter?: QueryInput['filter'], fallbackQuery?: string) {
+  if (moduleNames.length === 0 && !fallbackQuery) {
+    return {
+      operation: 'document',
+      error: 'No modules or search query specified',
+      suggestion: 'Provide module names (e.g., "EOP", "List") or a search query',
+    };
+  }
+
+  // Layer 1: Try static index
+  const items = moduleNames
+    .map(name => {
+      // Try as module first
+      const mod = getModule(name);
+      if (mod) return expandModule(mod);
+
+      // Try as platform feature
+      const feat = getPlatformFeature(name);
+      if (feat) return expandPlatformFeature(feat);
+
+      return null;
+    })
+    .filter(Boolean);
+
+  // If found in index, fetch those docs (Layer 1 success)
+  if (items.length > 0) {
+    const modules = items;
+
+    try {
+      const fetch = (await import('node-fetch')).default;
+      const { default: TurndownService } = await import('turndown');
+
+      const docsWithContent = await Promise.all(
+        modules.map(async (m: any) => {
         try {
           logger.debug(`Fetching docs: ${m.docUrl}`);
           const response = await fetch(m.docUrl, {
@@ -189,21 +283,144 @@ async function fetchDocumentation(moduleNames: string[], filter?: QueryInput['fi
       })
     );
 
+      return {
+        operation: 'document',
+        modules: docsWithContent,
+      };
+    } catch (error: any) {
+      logger.error('Documentation fetch error:', error);
+      return {
+        operation: 'document',
+        modules: modules.map(m => ({
+          ...m,
+          content: `View documentation at: ${m.docUrl}`,
+          source: m.docUrl,
+        })),
+      };
+    }
+  }
+
+  // Layer 3: Semantic search across comprehensive doc index
+  if (fallbackQuery || moduleNames.length > 0) {
+    const searchQuery = fallbackQuery || moduleNames.join(' ');
+    logger.info(`Attempting semantic search for: ${searchQuery}`);
+
+    // Search comprehensive doc index
+    const results = searchDocs(searchQuery, { limit: 5 });
+
+    if (results.length > 0) {
+      logger.info(`Found ${results.length} matching docs via semantic search`);
+
+      // Fetch top results
+      try {
+        const fetch = (await import('node-fetch')).default;
+        const { default: TurndownService } = await import('turndown');
+
+        const fetchedDocs = await Promise.all(
+          results.slice(0, 3).map(async (docEntry: DocEntry) => {
+            try {
+              const baseUrl = 'https://internetcomputer.org';
+              const fullUrl = docEntry.url.startsWith('http') ? docEntry.url : `${baseUrl}${docEntry.url}`;
+
+              logger.debug(`Fetching discovered doc: ${fullUrl}`);
+              const response = await fetch(fullUrl, {
+                headers: { 'User-Agent': getUserAgent() },
+                signal: AbortSignal.timeout(5000),
+              });
+
+              if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+              const html = await response.text();
+              const turndown = new TurndownService({
+                headingStyle: 'atx',
+                codeBlockStyle: 'fenced',
+              });
+              const markdown = turndown.turndown(html);
+
+              // Apply filtering
+              const mode = filter?.mode || 'summary'; // Default to summary for discovered docs
+              const maxLength = filter?.maxLength || 800;
+
+              let content = markdown;
+              if (mode === 'summary') {
+                content = markdown.split('\n\n').slice(0, 3).join('\n\n');
+              }
+
+              return {
+                title: docEntry.title,
+                category: docEntry.category,
+                id: docEntry.id,
+                url: fullUrl,
+                content: content.slice(0, maxLength),
+                relevance: 'semantic-search',
+                keywords: docEntry.keywords,
+              };
+            } catch (error: any) {
+              logger.warn(`Failed to fetch ${docEntry.title}: ${error.message}`);
+              return {
+                title: docEntry.title,
+                category: docEntry.category,
+                id: docEntry.id,
+                url: `https://internetcomputer.org${docEntry.url}`,
+                content: `Documentation available at URL above`,
+                relevance: 'semantic-search',
+                error: error.message,
+              };
+            }
+          })
+        );
+
+        return {
+          operation: 'document',
+          searchQuery,
+          discoveryMethod: 'semantic-search',
+          resultsFound: results.length,
+          documentsFetched: fetchedDocs.length,
+          documents: fetchedDocs,
+          allResults: results.map((r: DocEntry) => ({
+            id: r.id,
+            title: r.title,
+            category: r.category,
+            url: `https://internetcomputer.org${r.url}`,
+          })),
+        };
+      } catch (error: any) {
+        logger.error('Semantic search fetch error:', error);
+        return {
+          operation: 'document',
+          searchQuery,
+          discoveryMethod: 'semantic-search',
+          resultsFound: results.length,
+          results: results.map((r: DocEntry) => ({
+            id: r.id,
+            title: r.title,
+            category: r.category,
+            url: `https://internetcomputer.org${r.url}`,
+            keywords: r.keywords,
+          })),
+          hint: 'Use operation: "fetch-url" with one of the URLs above to get full content',
+        };
+      }
+    }
+
+    // Nothing found anywhere
     return {
       operation: 'document',
-      modules: docsWithContent,
-    };
-  } catch (error: any) {
-    logger.error('Documentation fetch error:', error);
-    return {
-      operation: 'document',
-      modules: modules.map(m => ({
-        ...m,
-        content: `View documentation at: ${m.docUrl}`,
-        source: m.docUrl,
-      })),
+      searchQuery,
+      error: 'No matching documentation found',
+      suggestion: 'Try different keywords or browse available categories',
+      availableCategories: getAllCategories(),
+      availableFeatures: PLATFORM_FEATURES.map(f => f.n).join(', '),
     };
   }
+
+  // No matches and no fallback query
+  return {
+    operation: 'document',
+    error: 'No valid modules or platform features found',
+    requested: moduleNames,
+    suggestion: `Available platform features: ${PLATFORM_FEATURES.map(f => f.n).join(', ')}`,
+  };
 }
 
 /**
@@ -308,7 +525,7 @@ async function fetchExamples(moduleNames: string[], maxLength?: number) {
 export const queryTool = {
   name: 'icp/query',
   description:
-    'Search and discover ICP modules, fetch live documentation and code examples from internetcomputer.org. Supports semantic search across 47 Motoko core library modules (Data Structures, Primitives, Utilities, System) with intelligent intent detection. Use icp/help section=\'query\' for detailed usage patterns and examples.',
+    'Query ICP documentation: modules, platform features, or any internetcomputer.org topic. See icp/help section=\'query\' for examples.',
   inputSchema: QueryInputSchema,
   execute: query,
 };

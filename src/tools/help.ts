@@ -9,7 +9,7 @@ import { logger } from '../utils/logger.js';
 // Input schema for the help tool
 export const HelpInputSchema = z.object({
   section: z
-    .enum(['overview', 'query', 'action', 'examples', 'tokens', 'all'])
+    .enum(['overview', 'query', 'action', 'examples', 'tokens', 'motoko', 'all'])
     .optional()
     .default('overview')
     .describe('Which help section to show'),
@@ -41,6 +41,9 @@ export async function help(input: HelpInput) {
     case 'tokens':
       content = getTokenInfo();
       break;
+    case 'motoko':
+      content = getMotokoGuidance();
+      break;
     case 'all':
       content = [
         getOverview(),
@@ -52,6 +55,8 @@ export async function help(input: HelpInput) {
         getExamples(),
         '\n---\n',
         getTokenInfo(),
+        '\n---\n',
+        getMotokoGuidance(),
       ].join('\n');
       break;
     default:
@@ -995,11 +1000,222 @@ Use this to track and optimize your usage patterns.
 `;
 }
 
+/**
+ * Motoko best practices and current syntax guidance
+ */
+function getMotokoGuidance(): string {
+  return `# Motoko Best Practices & Current Syntax
+
+**CRITICAL**: This section contains essential Motoko practices that differ from outdated training data.
+
+## 1. Library Imports: Use mo:core (NOT mo:base)
+
+❌ **WRONG** (mo:base deprecated August 2025):
+\`\`\`motoko
+import Array "mo:base/Array";
+import Map "mo:base/HashMap";
+\`\`\`
+
+✅ **CORRECT** (mo:core is the new standard):
+\`\`\`motoko
+import Array "mo:core/Array";
+import Map "mo:core/Map";
+\`\`\`
+
+**Why**: mo:core replaced mo:base in August 2025 with improved APIs and better ergonomics.
+
+**Query for details**: \`icp/query { modules: ["mo-core-Migration"] }\`
+
+---
+
+## 2. Loop Control: Labels Required for break/continue
+
+❌ **WRONG** (unlabeled break/continue not allowed):
+\`\`\`motoko
+for (item in items.vals()) {
+  if (item > 10) {
+    break;  // ❌ Compile error
+  }
+}
+\`\`\`
+
+✅ **CORRECT** (use labeled loops):
+\`\`\`motoko
+label order_loop for (order in orders.vals()) {
+  if (order.filled) {
+    continue order_loop;  // ✅ Works
+  };
+
+  label item_loop for (item in order.items.vals()) {
+    if (item.invalid) {
+      break item_loop;  // ✅ Breaks inner loop
+    };
+    if (item.critical) {
+      break order_loop;  // ✅ Breaks outer loop
+    };
+  };
+};
+\`\`\`
+
+**Rules**:
+- Every loop that uses \`break\` or \`continue\` MUST have a label
+- Syntax: \`label <name> for/while (...) { ... }\`
+- Reference the label: \`break <name>\` or \`continue <name>\`
+- Nested loops need different labels for each level
+
+**Query for details**: \`icp/query { modules: ["Labeled-Loops"] }\`
+
+---
+
+## 3. Dynamic Collections: Use List (NOT Buffer)
+
+❌ **WRONG** (Buffer deprecated):
+\`\`\`motoko
+import Buffer "mo:core/Buffer";  // ❌ Deprecated
+
+let buf = Buffer.Buffer<Nat>(10);
+buf.add(1);
+\`\`\`
+
+✅ **CORRECT** (List is the replacement):
+\`\`\`motoko
+import List "mo:core/List";
+
+let list = List.empty<Nat>();
+List.add(list, 1);  // Mutates in place
+List.add(list, 2);
+List.add(list, 3);
+
+// Convert to array when needed
+let arr = List.toArray(list);  // [1, 2, 3]
+\`\`\`
+
+**Key differences**:
+- List is **mutable** and has **dynamic sizing**
+- Use \`List.add()\` not \`list.add()\` (module method, not object method)
+- List is not iterable directly - use \`list.vals()\` or convert to array
+
+**Query for details**: \`icp/query { modules: ["List-vs-Buffer"] }\`
+
+---
+
+## 4. Canister Testing: Use dfx generate
+
+When testing canister builds during development:
+
+\`\`\`bash
+dfx generate <CanisterName>
+\`\`\`
+
+This generates TypeScript declarations without full deployment, useful for:
+- Quick syntax validation
+- Checking Candid interface generation
+- Integration testing setup
+
+**When to use**:
+- After modifying canister interfaces
+- Before committing interface changes
+- Setting up frontend integration
+
+---
+
+## 5. Enhanced Orthogonal Persistence (EOP)
+
+If using moc >= 0.15.0, EOP is **enabled by default**:
+
+✅ **What this means**:
+- No need for \`stable\` keyword in most cases
+- Upgrades scale independently of heap size
+- Main memory automatically persists across upgrades
+
+❌ **What to avoid**:
+- Over-using \`stable\` variables (usually unnecessary with EOP)
+- Manual stable memory management for simple state
+- Assuming serialization-based upgrade costs
+
+**Query for details**: \`icp/query { modules: ["EOP"] }\`
+
+**Check your version**: \`icp/action { action: "analyze project structure" }\` includes upgradeability assessment
+
+---
+
+## 6. Async Best Practices
+
+**Error handling with async**:
+\`\`\`motoko
+public func transfer(to: Principal, amount: Nat) : async Result.Result<(), Text> {
+  try {
+    let result = await otherCanister.process(to, amount);
+    #ok(())
+  } catch (e) {
+    #err(Error.message(e))
+  }
+};
+\`\`\`
+
+**Avoid common mistakes**:
+- ❌ Don't ignore async errors (always handle with try/catch)
+- ❌ Don't create long async call chains (can hit instruction limits)
+- ✅ Use Result types for explicit error handling
+- ✅ Consider upgrade implications of pending async calls
+
+**Query for details**: \`icp/query { modules: ["Async-Best-Practices"] }\`
+
+---
+
+## Common Gotchas Summary
+
+| Issue | Wrong | Right | Why |
+|-------|-------|-------|-----|
+| Library imports | mo:base | mo:core | mo:base deprecated Aug 2025 |
+| Loop breaks | unlabeled break | label loop | Required by Motoko syntax |
+| Dynamic arrays | Buffer | List | Buffer deprecated |
+| Testing builds | dfx deploy | dfx generate | Faster iteration |
+| Persistence | Over-use stable | Trust EOP (moc 0.15+) | EOP handles it |
+
+---
+
+## How to Get More Details
+
+For any of these topics, query the MCP:
+
+\`\`\`typescript
+// Get migration guide
+icp/query { modules: ["mo-core-Migration"] }
+
+// Get labeled loop documentation
+icp/query { modules: ["Labeled-Loops"] }
+
+// Get List usage examples
+icp/query { modules: ["List"] }  // or operation: "examples"
+
+// Check your project's EOP status
+icp/action { action: "analyze project structure" }
+\`\`\`
+
+---
+
+## Quick Reference Card
+
+**Always remember when writing Motoko**:
+
+1. ✅ Use \`mo:core\` not \`mo:base\`
+2. ✅ Label loops that use \`break\`/\`continue\`
+3. ✅ Use \`List\` for dynamic collections
+4. ✅ Use \`dfx generate\` for quick testing
+5. ✅ Trust EOP for persistence (moc 0.15+)
+6. ✅ Handle async errors with Result types
+7. ✅ Validate code with \`icp/action { action: "validate" }\`
+
+**When in doubt**: Query the MCP or check the official docs at internetcomputer.org.
+`;
+}
+
 // Export for use in main index
 export const helpTool = {
   name: 'icp/help',
   description:
-    'Get comprehensive documentation, usage patterns, and examples for ICP-MCP tools. Covers query operations (section=\'query\'), action types with workflows (section=\'action\'), real-world scenarios (section=\'examples\'), and token efficiency (section=\'tokens\').',
+    'Full ICP-MCP documentation and Motoko best practices.',
   inputSchema: HelpInputSchema,
   execute: help,
 };

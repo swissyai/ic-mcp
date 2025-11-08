@@ -575,7 +575,7 @@ async function handleGenerateTests(params: any, _context?: any) {
 export const actionTool = {
   name: 'icp/action',
   description:
-    'Execute ICP development operations: validate code (Motoko/Rust/Candid/dfx.json), test canister methods, deploy to local/playground networks, refactor code (add upgrade hooks, stable vars, auth), analyze project structure, check Candid interface upgrade safety, and generate unit test scaffolding following mo:test patterns. Use icp/help section=\'action\' for detailed examples, workflows, and best practices.',
+    'Execute ICP operations: validate, test, deploy, refactor, analyze. See icp/help section=\'action\' for details.',
   inputSchema: ActionInputSchema,
   execute: action,
 };

@@ -151,6 +151,45 @@ function formatValidation(validation: ProjectValidation): string {
 }
 
 /**
+ * Format upgradeability assessment
+ */
+function formatUpgradeability(upgradeability: any): string {
+  if (!upgradeability) {
+    return '';
+  }
+
+  const lines: string[] = ['\n## Upgradeability Assessment\n'];
+
+  // Score with icon
+  const scoreIcons = {
+    'excellent': '🟢',
+    'good': '🔵',
+    'fair': '🟡',
+    'needs-improvement': '🔴',
+  };
+  const icon = scoreIcons[upgradeability.score as keyof typeof scoreIcons] || '⚪';
+
+  lines.push(`**Overall Score:** ${icon} ${upgradeability.score.toUpperCase()}`);
+
+  if (upgradeability.mocVersion) {
+    lines.push(`**Motoko Compiler:** ${upgradeability.mocVersion}`);
+  }
+
+  lines.push(`**EOP Status:** ${upgradeability.eopEnabled ? '✅ Enabled' : upgradeability.eopAvailable ? '⚡ Available' : '❌ Not Available'}`);
+  lines.push('');
+
+  // Recommendations
+  if (upgradeability.recommendations.length > 0) {
+    lines.push('**Recommendations:**');
+    for (const rec of upgradeability.recommendations) {
+      lines.push(`  ${rec}`);
+    }
+  }
+
+  return lines.join('\n');
+}
+
+/**
  * Format project issues
  */
 function formatProjectIssues(issues: any[]): string {
@@ -225,6 +264,11 @@ export async function executeAnalyzeProject(input: AnalyzeProjectInput): Promise
   for (const canister of project.canisters) {
     output.push(formatCanisterSummary(canister));
     output.push('');
+  }
+
+  // Upgradeability assessment
+  if (project.upgradeability) {
+    output.push(formatUpgradeability(project.upgradeability));
   }
 
   // Dependency analysis

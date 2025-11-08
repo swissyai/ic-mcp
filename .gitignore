@@ -7,6 +7,17 @@ dist/
 .npm
 .eslintcache
 
+# Temporary files and directories
+tmp/
+temp/
+.cache/
+*.tmp
+coverage/
+
+# IDE
+.vscode/
+.idea/
+
 # Test files (only in tests/ directory, not src/tools/ helpers)
 /tests/**/*.test.ts
 /audit-*.ts
@@ -15,3 +26,9 @@ dist/
 *.md
 !README.md
 !LICENSE
+
+# Internal planning and vision documents
+VISION.md
+PLAN.md
+STRATEGY.md
+NOTES.md

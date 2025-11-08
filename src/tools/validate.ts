@@ -8,6 +8,7 @@ import { validateCandid, checkDidcAvailable } from '../validators/candid.js';
 import { validateMotoko } from '../validators/motoko.js';
 import { validateRust } from '../validators/rust.js';
 import { validateDfxJson } from '../validators/dfx-json.js';
+import { getPlatformFeature, expandPlatformFeature } from '../data/modules-minimal.js';
 import { logger } from '../utils/logger.js';
 
 // Input schema
@@ -96,11 +97,75 @@ export async function validate(input: ValidateInput) {
 
     logger.info(`Validation result: ${result.valid ? 'VALID' : 'INVALID'} (${result.issues.length} issues)`);
 
+    // Smart guidance: Suggest relevant platform features based on issues
+    const suggestions: any[] = [];
+
+    for (const issue of result.issues) {
+      const message = issue.message.toLowerCase();
+
+      // mo:base → mo:core migration
+      if (message.includes('mo:base')) {
+        const feature = getPlatformFeature('mo-core-Migration');
+        if (feature) {
+          suggestions.push({
+            topic: 'mo:core Migration',
+            reason: 'Deprecated mo:base import detected',
+            docUrl: expandPlatformFeature(feature).docUrl,
+            query: 'icp/query { modules: ["mo-core-Migration"] }',
+          });
+        }
+      }
+
+      // Labeled loops
+      if (message.includes('unlabeled') || message.includes('break') || message.includes('continue')) {
+        const feature = getPlatformFeature('Labeled-Loops');
+        if (feature) {
+          suggestions.push({
+            topic: 'Labeled Loops',
+            reason: 'Unlabeled break/continue detected',
+            docUrl: expandPlatformFeature(feature).docUrl,
+            query: 'icp/query { modules: ["Labeled-Loops"] }',
+          });
+        }
+      }
+
+      // Buffer deprecation
+      if (message.includes('buffer')) {
+        const feature = getPlatformFeature('List-vs-Buffer');
+        if (feature) {
+          suggestions.push({
+            topic: 'List vs Buffer',
+            reason: 'Buffer usage detected (deprecated)',
+            docUrl: expandPlatformFeature(feature).docUrl,
+            query: 'icp/query { modules: ["List-vs-Buffer"] }',
+          });
+        }
+      }
+
+      // EOP guidance
+      if (message.includes('eop') || message.includes('stable var') || message.includes('preupgrade')) {
+        const feature = getPlatformFeature('EOP');
+        if (feature) {
+          suggestions.push({
+            topic: 'Enhanced Orthogonal Persistence',
+            reason: 'Legacy persistence pattern detected',
+            docUrl: expandPlatformFeature(feature).docUrl,
+            query: 'icp/query { modules: ["EOP"] }',
+          });
+        }
+      }
+    }
+
+    // Add suggestions to result if any found
+    const enhancedResult = suggestions.length > 0
+      ? { ...result, learnMore: suggestions }
+      : result;
+
     return {
       content: [
         {
           type: 'text' as const,
-          text: JSON.stringify(result, null, 2),
+          text: JSON.stringify(enhancedResult, null, 2),
         },
       ],
     };

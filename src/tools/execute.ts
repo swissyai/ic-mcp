@@ -14,6 +14,7 @@ import { z } from 'zod';
 import { runInNewContext } from 'vm';
 import { DataEncoder } from '../core/toon-encoder.js';
 import { logger } from '../utils/logger.js';
+import { getWorkspaceManager, type WorkspaceData } from '../utils/workspace.js';
 
 // Import tools that will be available in sandbox
 import { query } from './query.js';
@@ -24,6 +25,8 @@ export const ExecuteInputSchema = z.object({
   code: z.string().describe('TypeScript code to execute in sandbox'),
   timeout: z.number().optional().default(5000).describe('Execution timeout in milliseconds (max 30000)'),
   format: z.enum(['toon', 'json', 'markdown']).optional().default('toon'),
+  workspace: z.string().optional().describe('Persistent workspace ID for resumable sessions'),
+  saveWorkspace: z.boolean().optional().default(false).describe('Save workspace state after execution'),
 });
 
 export type ExecuteInput = z.infer<typeof ExecuteInputSchema>;
@@ -104,18 +107,30 @@ const sandboxHelpers = {
 };
 
 /**
- * Execute code in sandbox
+ * Execute code in sandbox with optional persistent workspace
  */
 export async function execute(input: ExecuteInput) {
-  logger.info('Executing code in sandbox');
+  logger.info('Executing code in sandbox', {
+    workspace: input.workspace || 'none',
+    saveWorkspace: input.saveWorkspace,
+  });
   logger.debug(`Code length: ${input.code.length} chars, timeout: ${input.timeout}ms`);
 
   // Validate timeout
   const timeout = Math.min(input.timeout, 30000); // Max 30 seconds
 
+  // Get workspace if specified
+  const workspaceManager = getWorkspaceManager();
+  const workspaceData: WorkspaceData = input.workspace
+    ? workspaceManager.get(input.workspace)
+    : {};
+
   try {
-    // Create sandbox context with tools and helpers
+    // Create sandbox context with tools, helpers, and workspace
     const sandbox = {
+      // Persistent workspace (if provided)
+      workspace: workspaceData,
+
       // Tools available in sandbox
       queryTool: {
         execute: async (args: any) => {
@@ -187,12 +202,36 @@ export async function execute(input: ExecuteInput) {
 
     const result = await Promise.race([executionPromise, timeoutPromise]);
 
+    // Save workspace if requested
+    let workspaceMetadata = null;
+    if (input.workspace && input.saveWorkspace) {
+      try {
+        workspaceManager.save(input.workspace, sandbox.workspace);
+        workspaceMetadata = workspaceManager.getMetadata(input.workspace);
+        logger.info(`Workspace saved: ${input.workspace}`, {
+          size: workspaceMetadata?.sizeBytes,
+          keys: Object.keys(sandbox.workspace).length,
+        });
+      } catch (error: any) {
+        logger.error(`Failed to save workspace: ${error.message}`);
+        // Don't fail execution, just warn
+        workspaceMetadata = { error: error.message };
+      }
+    }
+
     // Encode result
     const encoded = DataEncoder.encode(
       {
         success: true,
         result,
         executionTime: `<${timeout}ms`,
+        workspace: input.workspace
+          ? {
+              id: input.workspace,
+              saved: input.saveWorkspace,
+              metadata: workspaceMetadata,
+            }
+          : undefined,
       },
       input.format
     );
@@ -207,6 +246,7 @@ export async function execute(input: ExecuteInput) {
       metadata: {
         executed: true,
         timeout,
+        workspace: input.workspace,
         tokenEstimate: DataEncoder.estimateTokens(encoded),
       },
     };
@@ -248,7 +288,7 @@ export async function execute(input: ExecuteInput) {
 export const executeTool = {
   name: 'icp/execute',
   description:
-    'Execute TypeScript code in a sandbox environment with access to ICP tools (queryTool, actionTool) and helper utilities. Use this to filter data, build multi-step pipelines, and reduce token usage by processing results in the execution environment instead of passing them through the model context. Supports async/await. Max timeout: 30s. Available helpers: extractFunctionSignatures, filterByKeyword, extractCodeBlocks, groupBy, sleep.',
+    'Run TypeScript in sandbox to filter/process ICP data. See icp/help section=\'execute\'.',
   inputSchema: ExecuteInputSchema,
   execute,
 };
