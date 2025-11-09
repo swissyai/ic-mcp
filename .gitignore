@@ -25,6 +25,7 @@ coverage/
 # Documentation
 *.md
 !README.md
+!CONTRIBUTING.md
 !LICENSE
 
 # Internal planning and vision documents
