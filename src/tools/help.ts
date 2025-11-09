@@ -299,7 +299,7 @@ Search for relevant modules (no conceptual knowledge base).
 
 ## Operations Reference
 
-The query tool supports 3 operations:
+The query tool supports 5 operations:
 
 **1. list-all**
 - Returns all 47 Motoko core modules organized by category
@@ -317,6 +317,21 @@ The query tool supports 3 operations:
 - Use when: Need working code samples
 - Example: \`{ operation: "examples", modules: ["Array"] }\`
 - Returns: 2-3 code blocks per module
+
+**4. list-icp-examples**
+- Lists 35 curated ICP examples (sourced from ICP ecosystem)
+- Filter by category, language, or search query
+- Categories: AI, DeFi, Chain Fusion, NFT, Games, Data Storage, Productivity, Tooling
+- Example: \`{ operation: "list-icp-examples", category: "Chain Fusion" }\`
+- Example: \`{ operation: "list-icp-examples", query: "bitcoin" }\`
+- Returns: Metadata for matching examples with sourceUrl and githubUrl
+
+**5. fetch-icp-example**
+- Fetches full details for a specific ICP example
+- Returns: README, dfx.json, project structure, source URLs
+- Example: \`{ operation: "fetch-icp-example", exampleId: "bitcoin-wallet" }\`
+- Use when: Need complete working project code and documentation
+- Note: Examples sourced from ICP ecosystem, visit icp.ninja for latest updates
 
 ## How It Works
 

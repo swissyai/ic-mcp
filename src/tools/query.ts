@@ -14,15 +14,19 @@ import {
   expandPlatformFeature,
 } from '../data/modules-minimal.js';
 import { searchDocs, getAllCategories, type DocEntry } from '../data/dfinity-docs-index.js';
+import { icpExamples } from '../data/examples/icp-examples.js';
 import { logger } from '../utils/logger.js';
 import { getUserAgent } from '../utils/version.js';
 
 // Input schema - simple and direct
 export const QueryInputSchema = z.object({
-  operation: z.enum(['list-all', 'document', 'examples', 'fetch-url']).describe('What to fetch'),
+  operation: z.enum(['list-all', 'document', 'examples', 'fetch-url', 'list-icp-examples', 'fetch-icp-example']).describe('What to fetch'),
   modules: z.array(z.string()).optional().describe('Module names (for document/examples)'),
   url: z.string().optional().describe('Direct URL path to fetch from internetcomputer.org'),
-  query: z.string().optional().describe('Search query for fallback discovery'),
+  query: z.string().optional().describe('Search query for fallback discovery or example filtering'),
+  exampleId: z.string().optional().describe('Example ID to fetch (for fetch-icp-example)'),
+  category: z.string().optional().describe('Filter examples by category (AI, DeFi, Chain Fusion, etc.)'),
+  language: z.string().optional().describe('Filter examples by language (motoko, rust, frontend-only)'),
   format: z.enum(['toon', 'json', 'markdown']).optional().default('toon'),
   filter: z.object({
     mode: z.enum(['full', 'summary', 'signatures-only']).optional().default('full')
@@ -54,6 +58,12 @@ export async function query(input: QueryInput) {
       break;
     case 'fetch-url':
       result = await fetchArbitraryUrl(input.url || '', input.filter);
+      break;
+    case 'list-icp-examples':
+      result = listICPExamples(input.category, input.language, input.query);
+      break;
+    case 'fetch-icp-example':
+      result = await fetchICPExample(input.exampleId || '', input.filter);
       break;
   }
 
@@ -517,6 +527,151 @@ async function fetchExamples(moduleNames: string[], maxLength?: number) {
         hasExamples: false,
         error: `View examples at: ${m.docUrl}`,
       })),
+    };
+  }
+}
+
+/**
+ * List ICP Examples - filter by category, language, or search query
+ */
+function listICPExamples(category?: string, language?: string, query?: string) {
+  let filtered = icpExamples;
+
+  // Filter by category
+  if (category) {
+    filtered = filtered.filter(ex =>
+      ex.category.toLowerCase() === category.toLowerCase()
+    );
+  }
+
+  // Filter by language
+  if (language) {
+    filtered = filtered.filter(ex =>
+      ex.language.toLowerCase() === language.toLowerCase()
+    );
+  }
+
+  // Filter by search query (search in title, description, technologies)
+  if (query) {
+    const q = query.toLowerCase();
+    filtered = filtered.filter(ex =>
+      ex.title.toLowerCase().includes(q) ||
+      ex.description.toLowerCase().includes(q) ||
+      ex.technologies.some(tech => tech.toLowerCase().includes(q))
+    );
+  }
+
+  // Group by category
+  const byCategory: Record<string, any[]> = {};
+  filtered.forEach(ex => {
+    if (!byCategory[ex.category]) {
+      byCategory[ex.category] = [];
+    }
+    byCategory[ex.category].push({
+      id: ex.id,
+      title: ex.title,
+      description: ex.description,
+      language: ex.language,
+      hasFrontend: ex.hasFrontend,
+      technologies: ex.technologies,
+      sourceUrl: ex.sourceUrl,
+      githubUrl: ex.githubUrl,
+      docUrl: ex.docUrl,
+    });
+  });
+
+  return {
+    operation: 'list-icp-examples',
+    total: filtered.length,
+    filters: { category, language, query },
+    examples: byCategory,
+    note: 'Use operation="fetch-icp-example" with exampleId to get full source code',
+  };
+}
+
+/**
+ * Fetch ICP Example - get full source code and documentation
+ */
+async function fetchICPExample(exampleId: string, _filter?: any) {
+  const example = icpExamples.find(ex => ex.id === exampleId);
+
+  if (!example) {
+    return {
+      operation: 'fetch-icp-example',
+      error: `Example "${exampleId}" not found`,
+      suggestion: 'Use operation="list-icp-examples" to see available examples',
+    };
+  }
+
+  try {
+    const fetch = (await import('node-fetch')).default;
+
+    // Fetch README from our source repo
+    const readmeUrl = `${example.sourceUrl}/README.md`;
+    logger.debug(`Fetching example README: ${readmeUrl}`);
+
+    const readmeResponse = await fetch(readmeUrl, {
+      headers: { 'User-Agent': getUserAgent() },
+      signal: AbortSignal.timeout(5000),
+    });
+
+    let readme = '';
+    if (readmeResponse.ok) {
+      readme = await readmeResponse.text();
+    }
+
+    // Fetch dfx.json to show project structure
+    const dfxUrl = `${example.sourceUrl}/dfx.json`;
+    const dfxResponse = await fetch(dfxUrl, {
+      headers: { 'User-Agent': getUserAgent() },
+      signal: AbortSignal.timeout(5000),
+    });
+
+    let dfxConfig = null;
+    if (dfxResponse.ok) {
+      dfxConfig = await dfxResponse.json();
+    }
+
+    return {
+      operation: 'fetch-icp-example',
+      example: {
+        id: example.id,
+        title: example.title,
+        category: example.category,
+        description: example.description,
+        language: example.language,
+        hasFrontend: example.hasFrontend,
+        technologies: example.technologies,
+        sourceUrl: example.sourceUrl,
+        githubUrl: example.githubUrl,
+        docUrl: example.docUrl,
+        readme: readme || 'README not available',
+        projectStructure: dfxConfig,
+      },
+      instructions: {
+        fetchBackend: example.language === 'motoko'
+          ? `${example.sourceUrl}/backend/app.mo or /backend/main.mo`
+          : example.language === 'rust'
+          ? `${example.sourceUrl}/backend/lib.rs or /src/lib.rs`
+          : 'Frontend-only project',
+        fetchFrontend: example.hasFrontend
+          ? `${example.sourceUrl}/frontend/`
+          : 'No frontend',
+        deployLocal: 'See README for deployment instructions',
+      },
+    };
+  } catch (error: any) {
+    logger.error('Example fetch error:', error);
+    return {
+      operation: 'fetch-icp-example',
+      example: {
+        id: example.id,
+        title: example.title,
+        sourceUrl: example.sourceUrl,
+        githubUrl: example.githubUrl,
+      },
+      error: 'Failed to fetch example details',
+      fallback: `View directly at: ${example.sourceUrl}`,
     };
   }
 }

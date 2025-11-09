@@ -32,3 +32,10 @@ VISION.md
 PLAN.md
 STRATEGY.md
 NOTES.md
+
+# Example extraction scripts (temporary, for icp-mcp-examples repo setup)
+scripts/process-example.ts
+scripts/add-example-metadata.ts
+scripts/extract-full-examples.ts
+scripts/add-source-urls.ts
+scripts/examples-staging/
