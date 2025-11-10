@@ -328,10 +328,14 @@ The query tool supports 5 operations:
 
 **5. fetch-icp-example**
 - Fetches full details for a specific ICP example
-- Returns: README, dfx.json, project structure, source URLs
+- Returns: README, dfx.json, project structure, comprehensive source file URLs
 - Example: \`{ operation: "fetch-icp-example", exampleId: "bitcoin-wallet" }\`
+- Response includes:
+  - \`sourceFiles\`: Complete URL mapping for all project files (frontend, backend, configs)
+  - \`recommendedFiles\`: Prioritized list of key files to fetch first
+  - \`usage\`: Instructions for next steps
 - Use when: Need complete working project code and documentation
-- Note: Examples sourced from ICP ecosystem, visit icp.ninja for latest updates
+- Note: Use your HTTP client to fetch file contents from the provided URLs
 
 ## How It Works
 

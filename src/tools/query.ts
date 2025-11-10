@@ -20,9 +20,8 @@ import { getUserAgent } from '../utils/version.js';
 
 // Input schema - simple and direct
 export const QueryInputSchema = z.object({
-  operation: z.enum(['list-all', 'document', 'examples', 'fetch-url', 'list-icp-examples', 'fetch-icp-example']).describe('What to fetch'),
+  operation: z.enum(['list-all', 'document', 'examples', 'list-icp-examples', 'fetch-icp-example']).describe('What to fetch'),
   modules: z.array(z.string()).optional().describe('Module names (for document/examples)'),
-  url: z.string().optional().describe('Direct URL path to fetch from internetcomputer.org'),
   query: z.string().optional().describe('Search query for fallback discovery or example filtering'),
   exampleId: z.string().optional().describe('Example ID to fetch (for fetch-icp-example)'),
   category: z.string().optional().describe('Filter examples by category (AI, DeFi, Chain Fusion, etc.)'),
@@ -42,7 +41,7 @@ export type QueryInput = z.infer<typeof QueryInputSchema>;
  * Main query tool - simplified data fetching
  */
 export async function query(input: QueryInput) {
-  logger.info(`Query: ${input.operation}${input.modules ? ` for ${input.modules.join(', ')}` : ''}${input.url ? ` url=${input.url}` : ''}${input.query ? ` query="${input.query}"` : ''}`);
+  logger.info(`Query: ${input.operation}${input.modules ? ` for ${input.modules.join(', ')}` : ''}${input.query ? ` query="${input.query}"` : ''}`);
 
   let result: any;
 
@@ -55,9 +54,6 @@ export async function query(input: QueryInput) {
       break;
     case 'examples':
       result = await fetchExamples(input.modules || [], input.filter?.maxLength);
-      break;
-    case 'fetch-url':
-      result = await fetchArbitraryUrl(input.url || '', input.filter);
       break;
     case 'list-icp-examples':
       result = listICPExamples(input.category, input.language, input.query);
@@ -134,72 +130,6 @@ function extractFunctionSignatures(markdown: string): string[] {
   }
 
   return [...new Set(signatures)]; // Remove duplicates
-}
-
-/**
- * Fetch arbitrary URL from internetcomputer.org (Layer 2)
- */
-async function fetchArbitraryUrl(urlPath: string, filter?: QueryInput['filter']): Promise<any> {
-  if (!urlPath) {
-    return {
-      operation: 'fetch-url',
-      error: 'No URL provided',
-      suggestion: 'Provide a URL path (e.g., "/docs/motoko/main/writing-motoko/modules") or full URL',
-    };
-  }
-
-  try {
-    const fetch = (await import('node-fetch')).default;
-    const { default: TurndownService } = await import('turndown');
-
-    // Normalize URL
-    const baseUrl = 'https://internetcomputer.org';
-    const fullUrl = urlPath.startsWith('http') ? urlPath : `${baseUrl}${urlPath}`;
-
-    logger.debug(`Fetching arbitrary URL: ${fullUrl}`);
-    const response = await fetch(fullUrl, {
-      headers: { 'User-Agent': getUserAgent() },
-      signal: AbortSignal.timeout(5000),
-    });
-
-    if (!response.ok) {
-      return {
-        operation: 'fetch-url',
-        error: `HTTP ${response.status} for ${fullUrl}`,
-        url: fullUrl,
-      };
-    }
-
-    const html = await response.text();
-    const turndown = new TurndownService({
-      headingStyle: 'atx',
-      codeBlockStyle: 'fenced',
-    });
-    const markdown = turndown.turndown(html);
-
-    // Apply filtering
-    const mode = filter?.mode || 'full';
-    const maxLength = filter?.maxLength || (mode === 'summary' ? 500 : 3000);
-
-    let content = markdown;
-    if (mode === 'summary') {
-      content = markdown.split('\n\n').slice(0, 2).join('\n\n');
-    }
-
-    return {
-      operation: 'fetch-url',
-      url: fullUrl,
-      content: content.slice(0, maxLength),
-      filterMode: mode,
-    };
-  } catch (error: any) {
-    logger.error(`Failed to fetch URL: ${error.message}`);
-    return {
-      operation: 'fetch-url',
-      error: `Failed to fetch: ${error.message}`,
-      url: urlPath,
-    };
-  }
 }
 
 /**
@@ -408,7 +338,7 @@ async function fetchDocumentation(moduleNames: string[], filter?: QueryInput['fi
             url: `https://internetcomputer.org${r.url}`,
             keywords: r.keywords,
           })),
-          hint: 'Use operation: "fetch-url" with one of the URLs above to get full content',
+          hint: 'Fetch one of the URLs above to get full documentation content',
         };
       }
     }
@@ -590,6 +520,82 @@ function listICPExamples(category?: string, language?: string, query?: string) {
 }
 
 /**
+ * Build comprehensive file URL mappings for an ICP example
+ * Returns all possible file locations based on example metadata
+ */
+function buildSourceFileUrls(example: any): Record<string, string> {
+  const baseUrl = example.sourceUrl;
+  const urls: Record<string, string> = {};
+
+  // Common project files
+  urls['dfx.json'] = `${baseUrl}/dfx.json`;
+  urls['README.md'] = `${baseUrl}/README.md`;
+  urls['.gitignore'] = `${baseUrl}/.gitignore`;
+
+  // Frontend files (if hasFrontend)
+  if (example.hasFrontend) {
+    urls['frontend/index.html'] = `${baseUrl}/frontend/index.html`;
+    urls['frontend/package.json'] = `${baseUrl}/frontend/package.json`;
+    urls['frontend/vite.config.js'] = `${baseUrl}/frontend/vite.config.js`;
+    urls['frontend/postcss.config.js'] = `${baseUrl}/frontend/postcss.config.js`;
+    urls['frontend/tailwind.config.js'] = `${baseUrl}/frontend/tailwind.config.js`;
+    urls['frontend/index.css'] = `${baseUrl}/frontend/index.css`;
+
+    // Common frontend source files
+    urls['frontend/src/main.jsx'] = `${baseUrl}/frontend/src/main.jsx`;
+    urls['frontend/src/main.tsx'] = `${baseUrl}/frontend/src/main.tsx`;
+    urls['frontend/src/App.jsx'] = `${baseUrl}/frontend/src/App.jsx`;
+    urls['frontend/src/App.tsx'] = `${baseUrl}/frontend/src/App.tsx`;
+    urls['frontend/src/index.jsx'] = `${baseUrl}/frontend/src/index.jsx`;
+    urls['frontend/src/index.tsx'] = `${baseUrl}/frontend/src/index.tsx`;
+  }
+
+  // Backend files based on language
+  if (example.language === 'motoko') {
+    urls['backend/main.mo'] = `${baseUrl}/backend/main.mo`;
+    urls['backend/app.mo'] = `${baseUrl}/backend/app.mo`;
+    urls['backend/Main.mo'] = `${baseUrl}/backend/Main.mo`;
+    urls['src/main.mo'] = `${baseUrl}/src/main.mo`;
+    urls['src/app.mo'] = `${baseUrl}/src/app.mo`;
+  } else if (example.language === 'rust') {
+    // Multiple common Rust patterns
+    urls['src/lib.rs'] = `${baseUrl}/src/lib.rs`;
+    urls['backend/src/lib.rs'] = `${baseUrl}/backend/src/lib.rs`;
+    urls['src/backend/src/lib.rs'] = `${baseUrl}/src/backend/src/lib.rs`;
+    urls['Cargo.toml'] = `${baseUrl}/Cargo.toml`;
+    urls['backend/Cargo.toml'] = `${baseUrl}/backend/Cargo.toml`;
+    urls['rust-toolchain.toml'] = `${baseUrl}/rust-toolchain.toml`;
+  }
+
+  return urls;
+}
+
+/**
+ * Get recommended files to fetch first based on example type
+ * Returns prioritized list of file keys
+ */
+function getRecommendedFiles(example: any): string[] {
+  const recommended: string[] = [];
+
+  // Always start with README and dfx.json
+  recommended.push('README.md', 'dfx.json');
+
+  // Add key source files based on project type
+  if (example.language === 'motoko') {
+    recommended.push('backend/main.mo', 'backend/app.mo');
+  } else if (example.language === 'rust') {
+    recommended.push('src/lib.rs', 'backend/src/lib.rs', 'Cargo.toml');
+  }
+
+  // Frontend files
+  if (example.hasFrontend) {
+    recommended.push('frontend/index.html', 'frontend/src/main.jsx', 'frontend/src/main.tsx', 'frontend/package.json');
+  }
+
+  return recommended;
+}
+
+/**
  * Fetch ICP Example - get full source code and documentation
  */
 async function fetchICPExample(exampleId: string, _filter?: any) {
@@ -632,6 +638,10 @@ async function fetchICPExample(exampleId: string, _filter?: any) {
       dfxConfig = await dfxResponse.json();
     }
 
+    // Build comprehensive file URLs
+    const sourceFiles = buildSourceFileUrls(example);
+    const recommendedFiles = getRecommendedFiles(example);
+
     return {
       operation: 'fetch-icp-example',
       example: {
@@ -648,17 +658,9 @@ async function fetchICPExample(exampleId: string, _filter?: any) {
         readme: readme || 'README not available',
         projectStructure: dfxConfig,
       },
-      instructions: {
-        fetchBackend: example.language === 'motoko'
-          ? `Motoko source typically at: ${example.sourceUrl}/backend/app.mo or /backend/main.mo`
-          : example.language === 'rust'
-          ? `Rust source typically at: ${example.sourceUrl}/src/lib.rs, /backend/src/lib.rs, /src/backend/src/lib.rs, or /src/<canister-name>/src/lib.rs. Check projectStructure.canisters for exact paths.`
-          : 'Frontend-only project',
-        fetchFrontend: example.hasFrontend
-          ? `${example.sourceUrl}/frontend/`
-          : 'No frontend',
-        deployLocal: 'See README for deployment instructions',
-      },
+      sourceFiles,
+      recommendedFiles,
+      usage: 'sourceFiles contains URLs for all project files. Fetch URLs from recommendedFiles first to see key source code.',
     };
   } catch (error: any) {
     logger.error('Example fetch error:', error);
