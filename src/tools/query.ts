@@ -560,6 +560,7 @@ function buildSourceFileUrls(example: any): Record<string, string> {
   } else if (example.language === 'rust') {
     // Multiple common Rust patterns
     urls['src/lib.rs'] = `${baseUrl}/src/lib.rs`;
+    urls['backend/lib.rs'] = `${baseUrl}/backend/lib.rs`;
     urls['backend/src/lib.rs'] = `${baseUrl}/backend/src/lib.rs`;
     urls['src/backend/src/lib.rs'] = `${baseUrl}/src/backend/src/lib.rs`;
     urls['Cargo.toml'] = `${baseUrl}/Cargo.toml`;
@@ -584,7 +585,7 @@ function getRecommendedFiles(example: any): string[] {
   if (example.language === 'motoko') {
     recommended.push('backend/main.mo', 'backend/app.mo');
   } else if (example.language === 'rust') {
-    recommended.push('src/lib.rs', 'backend/src/lib.rs', 'Cargo.toml');
+    recommended.push('src/lib.rs', 'backend/lib.rs', 'backend/src/lib.rs', 'Cargo.toml');
   }
 
   // Frontend files

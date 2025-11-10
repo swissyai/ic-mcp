@@ -44,9 +44,9 @@ Searches 47 mo:core modules + comprehensive internetcomputer.org documentation.
 ### Find ICP examples
 ```
 "Show me Bitcoin integration examples"
-"How do I integrate Ethereum on ICP?"
+"Get source for the Bitcoin wallet example"
 ```
-35 curated examples (AI, DeFi, Chain Fusion, NFT, Games) with full source code. Includes Motoko and Rust versions.
+35 curated examples with source file URLs. Motoko and Rust versions across AI, DeFi, Chain Fusion, NFT, Games.
 
 ### Generate tests
 ```
