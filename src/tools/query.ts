@@ -652,7 +652,7 @@ async function fetchICPExample(exampleId: string, _filter?: any) {
         fetchBackend: example.language === 'motoko'
           ? `${example.sourceUrl}/backend/app.mo or /backend/main.mo`
           : example.language === 'rust'
-          ? `${example.sourceUrl}/backend/lib.rs or /src/lib.rs`
+          ? `${example.sourceUrl}/src/lib.rs or /backend/src/lib.rs or /src/backend/src/lib.rs`
           : 'Frontend-only project',
         fetchFrontend: example.hasFrontend
           ? `${example.sourceUrl}/frontend/`
