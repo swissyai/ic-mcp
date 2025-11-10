@@ -650,9 +650,9 @@ async function fetchICPExample(exampleId: string, _filter?: any) {
       },
       instructions: {
         fetchBackend: example.language === 'motoko'
-          ? `${example.sourceUrl}/backend/app.mo or /backend/main.mo`
+          ? `Motoko source typically at: ${example.sourceUrl}/backend/app.mo or /backend/main.mo`
           : example.language === 'rust'
-          ? `${example.sourceUrl}/src/lib.rs or /backend/src/lib.rs or /src/backend/src/lib.rs`
+          ? `Rust source typically at: ${example.sourceUrl}/src/lib.rs, /backend/src/lib.rs, /src/backend/src/lib.rs, or /src/<canister-name>/src/lib.rs. Check projectStructure.canisters for exact paths.`
           : 'Frontend-only project',
         fetchFrontend: example.hasFrontend
           ? `${example.sourceUrl}/frontend/`
