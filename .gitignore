@@ -6,6 +6,7 @@ dist/
 *.tgz
 .npm
 .eslintcache
+.npmrc
 
 # Temporary files and directories
 tmp/
