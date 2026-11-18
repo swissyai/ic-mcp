@@ -1,6 +1,6 @@
 {
   "name": "ic-mcp",
-  "version": "0.13.5",
+  "version": "0.14.0",
   "description": "MCP server for building on the Internet Computer with icp-cli: official guidance by section, local deploys with confirmations, dfx.json conversion, Motoko checks through mops",
   "type": "module",
   "main": "dist/index.js",
