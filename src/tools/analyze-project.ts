@@ -1,357 +1,163 @@
 /**
- * icp/analyze-project tool
- * Analyzes entire ICP project structure, dependencies, and optionally validates all canisters
+ * Project analysis.
+ *
+ * icp.yaml projects: canisters with their recipes, environments, networks,
+ * mops toolchain pins, configuration problems, and optional compiler checks
+ * (`mops check` for Motoko, source checks for Rust).
+ * dfx.json projects: structure and dependency graph, plus the conversion step.
  */
 
 import { z } from 'zod';
-import type { Tool } from '@modelcontextprotocol/sdk/types.js';
+import { readFile } from 'fs/promises';
+import { existsSync } from 'fs';
+import { join, resolve } from 'path';
 import { analyzeProject } from '../analyzers/project.js';
 import { buildDependencyGraph, type DependencyGraph } from '../analyzers/dependencies.js';
+import { readIcpProject } from '../analyzers/icp-project.js';
 import { validateRust } from '../validators/rust.js';
-import { compileMotokoCode, type ActorAlias, type CompilationContext } from '../validators/motoko-compiler.js';
+import { compileMotokoCode, findMopsProject } from '../validators/motoko-compiler.js';
 import type { ValidationResult } from '../types/index.js';
-import { readFile } from 'fs/promises';
 import { logger } from '../utils/logger.js';
 
-/**
- * Input schema
- */
 export const analyzeProjectSchema = z.object({
-  projectPath: z.string().optional().describe('Path to ICP project (defaults to current directory)'),
-  validate: z.boolean().optional().describe('Run validation on all canisters (default: true)'),
-  checkDependencies: z.boolean().optional().describe('Analyze canister dependencies (default: true)'),
+  projectPath: z.string().optional().describe('Project directory (defaults to the server working directory)'),
+  validate: z.boolean().optional().describe('Run compiler checks on canisters (default: true)'),
+  checkDependencies: z.boolean().optional().describe('dfx projects: build the dependency graph (default: true)'),
 });
 
 export type AnalyzeProjectInput = z.infer<typeof analyzeProjectSchema>;
 
-/**
- * Tool definition
- */
-export const analyzeProjectTool: Tool = {
-  name: 'icp/analyze-project',
-  description: 'Analyzes complete ICP project structure from dfx.json, including all canisters, their configurations, source files, and line counts. Builds dependency graphs showing both explicit (dfx.json) and implicit (import statement) dependencies, detects circular dependencies, and calculates valid topological build order. Optionally validates all canister code using appropriate validators (moc for Motoko, ic-cdk patterns for Rust). Returns comprehensive project overview with warnings about configuration issues. Use this to understand multi-canister architecture, plan deployment order, or validate entire projects before deployment.',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      projectPath: {
-        type: 'string',
-        description: 'Path to ICP project (defaults to current directory)',
-      },
-      validate: {
-        type: 'boolean',
-        description: 'Run validation on all canisters (default: true)',
-      },
-      checkDependencies: {
-        type: 'boolean',
-        description: 'Analyze canister dependencies (default: true)',
-      },
-    },
-  },
-};
-
-/**
- * Validation results for all canisters
- */
-interface ProjectValidation {
-  [canisterName: string]: ValidationResult;
+function formatIssues(result: ValidationResult): string[] {
+  const lines: string[] = [];
+  for (const issue of result.issues.slice(0, 15)) {
+    const where = issue.line ? `${issue.file ? `${issue.file}:` : 'line '}${issue.line}: ` : '';
+    lines.push(`  - ${issue.severity} ${issue.code ? `[${issue.code}] ` : ''}${where}${issue.message.split('\n')[0]}`);
+  }
+  if (result.issues.length > 15) lines.push(`  - ... ${result.issues.length - 15} more`);
+  return lines;
 }
 
-/**
- * Format canister summary
- */
-function formatCanisterSummary(canister: any): string {
-  const lines = [
-    `**${canister.name}** (${canister.type})`,
-    `  Files: ${canister.sourceFiles.length}`,
-    `  Lines: ${canister.linesOfCode}`,
-  ];
-
-  if (canister.main) {
-    lines.push(`  Main: ${canister.main}`);
-  }
-
-  if (canister.dependencies.length > 0) {
-    lines.push(`  Dependencies: ${canister.dependencies.join(', ')}`);
-  }
-
-  return lines.join('\n');
-}
-
-/**
- * Format dependency graph
- */
 function formatDependencyGraph(graph: DependencyGraph): string {
   const lines: string[] = [];
-
+  lines.push(`Build order: ${graph.buildOrder.join(' -> ') || '(none)'}`);
   if (graph.cycles.length > 0) {
-    lines.push('\n**⚠️  CIRCULAR DEPENDENCIES DETECTED:**');
-    for (const cycle of graph.cycles) {
-      lines.push(`  ${cycle.join(' → ')}`);
-    }
-    lines.push('');
+    lines.push('Circular dependencies:');
+    for (const cycle of graph.cycles) lines.push(`  - ${cycle.join(' -> ')}`);
   }
-
-  if (graph.buildOrder.length > 0) {
-    lines.push('**Build Order:**');
-    lines.push(`  ${graph.buildOrder.join(' → ')}`);
-    lines.push('');
-  } else if (graph.cycles.length > 0) {
-    lines.push('**Build Order:** Cannot determine (circular dependencies exist)');
-    lines.push('');
-  }
-
-  // Show dependency tree
-  lines.push('**Dependency Tree:**');
-  for (const node of graph.nodes) {
-    if (node.dependencies.length === 0) {
-      lines.push(`  ${node.name} (no dependencies)`);
-    } else {
-      lines.push(`  ${node.name} → ${node.dependencies.join(', ')}`);
-    }
-  }
-
   return lines.join('\n');
 }
 
-/**
- * Format validation results
- */
-function formatValidation(validation: ProjectValidation): string {
-  const lines: string[] = ['\n**Validation Results:**'];
+async function analyzeIcp(projectPath: string, shouldValidate: boolean): Promise<string> {
+  const project = await readIcpProject(projectPath);
+  if (!project) return '';
+  const out: string[] = [`# Project: ${projectPath.split('/').pop()}`, '', `Location: ${project.root}`, 'Format: icp.yaml', ''];
 
-  let totalIssues = 0;
-  let validCount = 0;
-
-  for (const [name, result] of Object.entries(validation)) {
-    const status = result.valid ? '✅' : '❌';
-    const issueCount = result.issues.length;
-    totalIssues += issueCount;
-
-    if (result.valid) {
-      validCount++;
-      lines.push(`  ${status} ${name}: Valid`);
-    } else {
-      lines.push(`  ${status} ${name}: ${issueCount} issue(s)`);
-
-      // Show first 3 issues
-      for (const issue of result.issues.slice(0, 3)) {
-        const location = issue.line ? `:${issue.line}` : '';
-        lines.push(`      ${issue.severity}: ${issue.message}${location}`);
-      }
-
-      if (result.issues.length > 3) {
-        lines.push(`      ... and ${result.issues.length - 3} more`);
-      }
-    }
-  }
-
-  lines.push(`\n**Summary:** ${validCount}/${Object.keys(validation).length} canisters valid, ${totalIssues} total issues`);
-
-  return lines.join('\n');
-}
-
-/**
- * Format upgradeability assessment
- */
-function formatUpgradeability(upgradeability: any): string {
-  if (!upgradeability) {
-    return '';
-  }
-
-  const lines: string[] = ['\n## Upgradeability Assessment\n'];
-
-  // Score with icon
-  const scoreIcons = {
-    'excellent': '🟢',
-    'good': '🔵',
-    'fair': '🟡',
-    'needs-improvement': '🔴',
-  };
-  const icon = scoreIcons[upgradeability.score as keyof typeof scoreIcons] || '⚪';
-
-  lines.push(`**Overall Score:** ${icon} ${upgradeability.score.toUpperCase()}`);
-
-  if (upgradeability.mocVersion) {
-    lines.push(`**Motoko Compiler:** ${upgradeability.mocVersion}`);
-  }
-
-  lines.push(`**EOP Status:** ${upgradeability.eopEnabled ? '✅ Enabled' : upgradeability.eopAvailable ? '⚡ Available' : '❌ Not Available'}`);
-  lines.push('');
-
-  // Recommendations
-  if (upgradeability.recommendations.length > 0) {
-    lines.push('**Recommendations:**');
-    for (const rec of upgradeability.recommendations) {
-      lines.push(`  ${rec}`);
-    }
-  }
-
-  return lines.join('\n');
-}
-
-/**
- * Format project issues
- */
-function formatProjectIssues(issues: any[]): string {
-  if (issues.length === 0) {
-    return '\n**✅ No project-level issues detected**';
-  }
-
-  const lines: string[] = ['\n**Project Issues:**'];
-
-  for (const issue of issues) {
-    const icon = issue.severity === 'error' ? '❌' : issue.severity === 'warning' ? '⚠️' : 'ℹ️';
-    lines.push(`  ${icon} ${issue.message}`);
-  }
-
-  return lines.join('\n');
-}
-
-/**
- * Build actor aliases from project canisters
- */
-function buildActorAliases(project: any, excludeCanister?: string): ActorAlias[] {
-  const aliases: ActorAlias[] = [];
-
+  out.push('## Canisters', '');
   for (const canister of project.canisters) {
-    // Don't include the canister we're validating
-    if (canister.name === excludeCanister) continue;
+    let detail = '';
+    if (canister.kind === 'motoko') {
+      const dir = await findMopsProject(canister.dir, canister.name);
+      if (dir) {
+        const toml = await readFile(join(dir, 'mops.toml'), 'utf-8').catch(() => '');
+        const moc = toml.match(/^\s*moc\s*=\s*"([^"]+)"/m)?.[1];
+        detail = ` (mops.toml in ${dir === project.root ? '.' : dir.slice(project.root.length + 1)}${moc ? `, moc ${moc}` : ', moc not pinned'})`;
+      } else {
+        detail = ' (no mops.toml declares it)';
+      }
+    }
+    out.push(`- ${canister.name}: ${canister.kind}${canister.recipe ? ` via ${canister.recipe}` : ''}${detail}`);
+  }
 
-    // Only include canisters with Candid interfaces
-    if (canister.candid) {
-      aliases.push({
-        name: canister.name,
-        candidPath: canister.candid,
-      });
+  out.push('', '## Environments', '');
+  for (const env of project.environments) {
+    out.push(`- ${env.name} -> network ${env.network}${env.canisters ? ` [${env.canisters.join(', ')}]` : ''}`);
+  }
+  const custom = project.networks.filter(n => n.name !== 'local' && n.name !== 'ic');
+  if (custom.length > 0) {
+    out.push('', '## Networks', '');
+    for (const net of custom) out.push(`- ${net.name}: ${net.mode}${net.url ? ` ${net.url}` : ''}`);
+  }
+
+  const problems = [...project.problems];
+  for (const canister of project.canisters.filter(c => c.kind === 'motoko')) {
+    if (!(await findMopsProject(canister.dir, canister.name))) {
+      problems.push(`Motoko canister "${canister.name}" needs [canisters.${canister.name}] in mops.toml.`);
+    }
+  }
+  if (existsSync(join(projectPath, 'dfx.json'))) {
+    problems.push('dfx.json is still present; icp-cli ignores it.');
+  }
+
+  if (shouldValidate) {
+    out.push('', '## Checks', '');
+    for (const canister of project.canisters) {
+      if (canister.kind === 'motoko') {
+        const result = await compileMotokoCode('', { projectPath: canister.dir, canister: canister.name });
+        out.push(`${canister.name}: ${result.valid ? 'passes mops check' : 'fails mops check'}`);
+        out.push(...formatIssues(result));
+      } else if (canister.kind === 'rust') {
+        const lib = [join(canister.dir, 'src', 'lib.rs'), join(canister.dir, canister.name, 'src', 'lib.rs')].find(p => existsSync(p));
+        if (lib) {
+          const result = await validateRust(await readFile(lib, 'utf-8'));
+          out.push(`${canister.name}: Rust source checks on ${lib.slice(project.root.length + 1)}`);
+          out.push(...formatIssues(result));
+        }
+      }
     }
   }
 
-  return aliases;
+  out.push('', '## Problems', '');
+  out.push(...(problems.length > 0 ? problems.map(p => `- ${p}`) : ['- none found']));
+  return out.join('\n');
 }
 
-/**
- * Execute analyze-project tool
- */
 export async function executeAnalyzeProject(input: AnalyzeProjectInput): Promise<string> {
-  const projectPath = input.projectPath || process.cwd();
+  const projectPath = resolve(input.projectPath || process.cwd());
   const shouldValidate = input.validate !== false;
-  const shouldCheckDeps = input.checkDependencies !== false;
-
   logger.info(`Analyzing project at: ${projectPath}`);
 
-  // Analyze project structure
+  if (existsSync(join(projectPath, 'icp.yaml'))) {
+    return analyzeIcp(projectPath, shouldValidate);
+  }
+
   const project = await analyzeProject(projectPath);
-
   if (!project) {
-    return 'Error: dfx.json not found or invalid. Are you in an ICP project directory?';
+    return `No icp.yaml or dfx.json in ${projectPath}. Create a project with action "new-project".`;
   }
 
-  // Build output
-  const output: string[] = [];
-
-  output.push(`# Project Analysis: ${project.name}`);
-  output.push(`\n**Location:** ${project.path}`);
-  output.push(`**dfx Version:** ${project.dfxConfig.dfx || 'not specified'}`);
-  output.push(`**Canisters:** ${project.canisters.length}`);
-  output.push(`**Total Lines of Code:** ${project.totalLinesOfCode}`);
-
-  if (project.networks.length > 0) {
-    output.push(`**Networks:** ${project.networks.join(', ')}`);
-  }
-
-  // Canister details
-  output.push('\n## Canisters\n');
+  const out: string[] = [
+    `# Project: ${project.name}`,
+    '',
+    `Location: ${project.path}`,
+    'Format: dfx.json (legacy). Convert with action "convert-dfx" to build and deploy with icp-cli.',
+    `Canisters: ${project.canisters.length}`,
+    `Lines of code: ${project.totalLinesOfCode}`,
+    '',
+    '## Canisters',
+    '',
+  ];
   for (const canister of project.canisters) {
-    output.push(formatCanisterSummary(canister));
-    output.push('');
+    out.push(`- ${canister.name}: ${canister.type}${canister.main ? ` (${canister.main})` : ''}, ${canister.sourceFiles.length} files`);
   }
 
-  // Upgradeability assessment
-  if (project.upgradeability) {
-    output.push(formatUpgradeability(project.upgradeability));
+  if (input.checkDependencies !== false) {
+    out.push('', '## Dependencies', '', formatDependencyGraph(await buildDependencyGraph(project)));
   }
 
-  // Dependency analysis
-  if (shouldCheckDeps) {
-    output.push('\n## Dependency Analysis\n');
-    const graph = await buildDependencyGraph(project);
-    output.push(formatDependencyGraph(graph));
-  }
-
-  // Validation (parallel for speed)
   if (shouldValidate) {
-    const validation: ProjectValidation = {};
-
-    // Validate all canisters in parallel
-    const validationPromises = project.canisters.map(async (canister) => {
-      // Only validate Motoko and Rust canisters
-      if (canister.type === 'motoko' && canister.mainPath) {
-        try {
-          const code = await readFile(canister.mainPath, 'utf-8');
-
-          // Build actor aliases for this canister's dependencies
-          const actorAliases = buildActorAliases(project, canister.name);
-          const context: CompilationContext = {
-            actorAliases,
-            projectPath,
-          };
-
-          return {
-            name: canister.name,
-            result: await compileMotokoCode(code, context),
-          };
-        } catch (error: any) {
-          return {
-            name: canister.name,
-            result: {
-              valid: false,
-              issues: [{
-                severity: 'error',
-                message: `Failed to read main file: ${error.message}`,
-              }],
-            } as ValidationResult,
-          };
-        }
-      } else if (canister.type === 'rust' && canister.mainPath) {
-        try {
-          const code = await readFile(canister.mainPath, 'utf-8');
-          return {
-            name: canister.name,
-            result: await validateRust(code),
-          };
-        } catch (error: any) {
-          return {
-            name: canister.name,
-            result: {
-              valid: false,
-              issues: [{
-                severity: 'error',
-                message: `Failed to read main file: ${error.message}`,
-              }],
-            } as ValidationResult,
-          };
-        }
+    out.push('', '## Checks', '');
+    for (const canister of project.canisters) {
+      if (canister.type === 'rust' && canister.sourceFiles.length > 0) {
+        const lib = canister.sourceFiles.find(f => f.endsWith('lib.rs')) || canister.sourceFiles[0];
+        const result = await validateRust(await readFile(resolve(projectPath, lib), 'utf-8'));
+        out.push(`${canister.name}: Rust source checks on ${lib}`, ...formatIssues(result));
+      } else if (canister.type === 'motoko') {
+        out.push(`${canister.name}: Motoko compiler checks run on icp.yaml projects with mops.toml; convert first.`);
       }
-      return null;
-    });
-
-    // Wait for all validations to complete
-    const results = await Promise.all(validationPromises);
-
-    // Build validation map from results
-    for (const result of results) {
-      if (result) {
-        validation[result.name] = result.result;
-      }
-    }
-
-    if (Object.keys(validation).length > 0) {
-      output.push(formatValidation(validation));
     }
   }
 
-  // Project issues
-  output.push(formatProjectIssues(project.issues));
-
-  return output.join('\n');
+  out.push('', '## Problems', '');
+  out.push(...(project.issues.length > 0 ? project.issues.map(i => `- ${i.severity}: ${i.message}`) : ['- none found']));
+  return out.join('\n');
 }

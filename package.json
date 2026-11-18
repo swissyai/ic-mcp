@@ -1,7 +1,7 @@
 {
   "name": "ic-mcp",
   "version": "0.13.5",
-  "description": "Model Context Protocol server for Internet Computer development with natural language tools and TOON encoding",
+  "description": "MCP server for building on the Internet Computer with icp-cli: official guidance by section, local deploys with confirmations, dfx.json conversion, Motoko checks through mops",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -26,6 +26,8 @@
     "mcp",
     "internet-computer",
     "icp",
+    "icp-cli",
+    "mops",
     "motoko",
     "rust",
     "candid",
@@ -44,7 +46,6 @@
   },
   "devDependencies": {
     "@types/node": "^24.9.1",
-    "@types/turndown": "^5.0.6",
     "@vitest/ui": "^4.0.2",
     "gpt-tokenizer": "^3.2.0",
     "tsx": "^4.20.6",
@@ -54,10 +55,7 @@
   "dependencies": {
     "@byjohann/toon": "^0.3.1",
     "@modelcontextprotocol/sdk": "^1.20.1",
-    "@octokit/rest": "^22.0.0",
-    "cheerio": "^1.1.2",
-    "node-fetch": "^3.3.2",
-    "turndown": "^7.2.1",
+    "yaml": "^2.9.1",
     "zod": "^3.25.76",
     "zod-to-json-schema": "^3.24.6"
   }

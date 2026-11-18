@@ -19,8 +19,6 @@ coverage/
 .vscode/
 .idea/
 
-# Test files (only in tests/ directory, not src/tools/ helpers)
-/tests/**/*.test.ts
 /audit-*.ts
 
 # Documentation

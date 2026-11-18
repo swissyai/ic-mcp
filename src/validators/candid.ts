@@ -2,16 +2,13 @@
  * Candid validation using didc CLI
  */
 
-import { exec } from 'child_process';
 import { writeFile, unlink } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { promisify } from 'util';
 import type { ValidationIssue, ValidationResult } from '../types/index.js';
 import { logger } from '../utils/logger.js';
 import { validationCache, generateCacheKey } from '../utils/cache.js';
-
-const execAsync = promisify(exec);
+import { runCommand } from '../executors/icp-executor.js';
 
 /**
  * Strip ANSI color codes from terminal output
@@ -34,7 +31,7 @@ function parseDidcError(stderr: string): ValidationIssue[] {
       severity: 'error',
       message: `Unknown type '${unboundMatch[1]}'`,
       suggestion: 'Check type name casing (use lowercase for primitives: nat, text, bool)',
-      docUrl: 'https://internetcomputer.org/docs/current/references/candid-ref',
+      docUrl: 'https://docs.internetcomputer.org/guides/canister-calls/candid/',
     });
   }
 
@@ -63,7 +60,7 @@ function parseDidcError(stderr: string): ValidationIssue[] {
       column,
       message: errorMsg,
       suggestion: 'Check Candid syntax and service interface definition',
-      docUrl: 'https://internetcomputer.org/docs/current/references/candid-ref',
+      docUrl: 'https://docs.internetcomputer.org/guides/canister-calls/candid/',
     });
   }
 
@@ -75,7 +72,7 @@ function parseDidcError(stderr: string): ValidationIssue[] {
         severity: 'error',
         message: `Duplicate method name: '${labelMatch[1]}'`,
         suggestion: 'Service methods must have unique names',
-        docUrl: 'https://internetcomputer.org/docs/current/references/candid-ref',
+        docUrl: 'https://docs.internetcomputer.org/guides/canister-calls/candid/',
       });
     }
   }
@@ -112,35 +109,20 @@ export async function validateCandid(code: string): Promise<ValidationResult> {
     // Write code to temp file
     await writeFile(tempFile, code, 'utf-8');
 
-    // Run didc check
-    try {
-      await execAsync(`didc check ${tempFile}`);
-
-      // Validation passed
-      const result: ValidationResult = {
-        valid: true,
-        issues: [],
-      };
-
-      // Cache successful validation
+    const check = await runCommand({ program: 'didc', args: ['check', tempFile], timeoutMs: 30_000 });
+    if (check.ok) {
+      const result: ValidationResult = { valid: true, issues: [] };
       validationCache.set(cacheKey, result);
-
-      return result;
-    } catch (error: any) {
-      // didc returns non-zero exit code on validation failure
-      const stderr = error.stderr || error.message;
-      const issues = parseDidcError(stderr);
-
-      const result: ValidationResult = {
-        valid: false,
-        issues,
-      };
-
-      // Cache failed validation too (helpful for iterative fixes)
-      validationCache.set(cacheKey, result, 60 * 1000); // Cache for 1 minute
-
       return result;
     }
+
+    const issues = parseDidcError(check.stderr || check.stdout);
+    if (issues.length === 0) {
+      issues.push({ severity: 'error', message: (check.stderr || check.stdout || 'didc check failed').trim() });
+    }
+    const result: ValidationResult = { valid: false, issues };
+    validationCache.set(cacheKey, result, 60 * 1000);
+    return result;
   } catch (error: any) {
     logger.error('Candid validation error:', error);
 
@@ -167,10 +149,6 @@ export async function validateCandid(code: string): Promise<ValidationResult> {
  * Check if didc is available
  */
 export async function checkDidcAvailable(): Promise<boolean> {
-  try {
-    await execAsync('didc --version');
-    return true;
-  } catch {
-    return false;
-  }
+  const result = await runCommand({ program: 'didc', args: ['--version'], timeoutMs: 10_000 });
+  return result.ok;
 }

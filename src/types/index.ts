@@ -2,7 +2,7 @@
  * Core type definitions for ICP MCP
  */
 
-export type Language = 'candid' | 'motoko' | 'rust' | 'dfx-json';
+export type Language = 'candid' | 'motoko' | 'rust' | 'dfx-json' | 'icp-yaml';
 
 export type IssueSeverity = 'error' | 'warning' | 'info';
 
@@ -13,6 +13,7 @@ export interface ValidationIssue {
   column?: number;
   message: string;
   code?: string;
+  file?: string;
 
   // Rich diagnostics (always provided when available)
   // These help users understand WHY issues matter on ICP specifically

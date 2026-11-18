@@ -1,13 +1,10 @@
 /**
- * Code Execution Tool - Run TypeScript code in sandbox with access to ICP tools
+ * Execute tool: run JavaScript that calls the query and action tools and
+ * returns only the data needed, so large intermediate results stay out of the
+ * model's context.
  *
- * Implements the "Code Execution with MCP" pattern from:
- * https://www.anthropic.com/engineering/code-execution-with-mcp
- *
- * Benefits:
- * - Data filtering happens in execution environment (not through model context)
- * - Multi-step pipelines without passing intermediate results through model
- * - 90-98% token reduction for complex workflows
+ * The code runs in a separate Node vm context. That is not a security
+ * boundary: it has this server's permissions.
  */
 
 import { z } from 'zod';
@@ -17,12 +14,12 @@ import { logger } from '../utils/logger.js';
 import { getWorkspaceManager, type WorkspaceData } from '../utils/workspace.js';
 
 // Import tools that will be available in sandbox
-import { query } from './query.js';
-import { action } from './action.js';
+import { query, QueryInputSchema } from './query.js';
+import { action, ActionInputSchema } from './action.js';
 
 // Input schema
 export const ExecuteInputSchema = z.object({
-  code: z.string().describe('TypeScript code to execute in sandbox'),
+  code: z.string().describe('JavaScript body of an async function; `return` the result'),
   timeout: z.number().optional().default(5000).describe('Execution timeout in milliseconds (max 30000)'),
   format: z.enum(['toon', 'json', 'markdown']).optional().default('toon'),
   workspace: z.string().optional().describe('Persistent workspace ID for resumable sessions'),
@@ -106,8 +103,18 @@ const sandboxHelpers = {
   },
 };
 
+function unwrap(result: { content?: Array<{ text?: string }> }): any {
+  const text = result.content?.[0]?.text;
+  if (typeof text !== 'string') return result;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text;
+  }
+}
+
 /**
- * Execute code in sandbox with optional persistent workspace
+ * Execute code with optional persistent workspace
  */
 export async function execute(input: ExecuteInput) {
   logger.info('Executing code in sandbox', {
@@ -133,28 +140,10 @@ export async function execute(input: ExecuteInput) {
 
       // Tools available in sandbox
       queryTool: {
-        execute: async (args: any) => {
-          logger.debug('Sandbox calling queryTool', args);
-          const result = await query(args);
-          // Extract content from MCP response format
-          if (result.content && Array.isArray(result.content)) {
-            const text = result.content[0]?.text;
-            return text ? JSON.parse(text) : result;
-          }
-          return result;
-        },
+        execute: async (args: any) => unwrap(await query(QueryInputSchema.parse({ format: 'json', ...args }))),
       },
       actionTool: {
-        execute: async (args: any) => {
-          logger.debug('Sandbox calling actionTool', args);
-          const result = await action(args);
-          // Extract content from MCP response format
-          if (result.content && Array.isArray(result.content)) {
-            const text = result.content[0]?.text;
-            return text ? JSON.parse(text) : result;
-          }
-          return result;
-        },
+        execute: async (args: any) => unwrap(await action(ActionInputSchema.parse({ format: 'json', ...args }))),
       },
 
       // Helper utilities
@@ -288,7 +277,7 @@ export async function execute(input: ExecuteInput) {
 export const executeTool = {
   name: 'icp/execute',
   description:
-    'Run TypeScript in sandbox to filter/process ICP data. See icp/help section=\'execute\'.',
+    'Run JavaScript that calls queryTool.execute / actionTool.execute and returns only what you need. Not a security sandbox. See icp/help section="execute".',
   inputSchema: ExecuteInputSchema,
   execute,
 };

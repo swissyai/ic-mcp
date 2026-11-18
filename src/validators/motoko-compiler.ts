@@ -1,432 +1,237 @@
 /**
- * Motoko compilation using moc compiler
+ * Motoko compiler checks through mops (https://skills.internetcomputer.org/skills/mops-cli/).
+ *
+ * - Project mode: `mops check [canister]` in the directory that holds the
+ *   project's mops.toml, so the project's pinned moc, dependencies and flags
+ *   apply. The files on disk are checked; nothing is modified (no --fix).
+ * - Snippet mode: a temporary mops project with the latest moc and mo:core
+ *   (or a requested moc version) checks one source file.
  */
 
-import { exec } from 'child_process';
-import { writeFile, unlink, mkdir, copyFile, rm } from 'fs/promises';
+import { mkdtemp, writeFile, rm, readFile, readdir } from 'fs/promises';
+import { existsSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { promisify } from 'util';
-import { existsSync } from 'fs';
 import type { ValidationIssue, ValidationResult } from '../types/index.js';
 import { logger } from '../utils/logger.js';
-import { validationCache, generateCacheKey } from '../utils/cache.js';
+import { runCommand } from '../executors/icp-executor.js';
+import { REFS } from '../data/references.js';
 
-/**
- * Actor alias for resolving canister imports
- */
-export interface ActorAlias {
-  name: string;
-  candidPath: string;
-}
-
-/**
- * Compilation context with canister aliases
- */
-export interface CompilationContext {
-  actorAliases?: ActorAlias[];
+export interface CompileContext {
   projectPath?: string;
+  canister?: string;
+  mocVersion?: string;
 }
 
-const execAsync = promisify(exec);
-
-// Session-level caching
-let mocPathCache: string | null | undefined = undefined;
-let basePathCache: string | null | undefined = undefined;
-
-/**
- * Find moc compiler path
- */
-export async function findMocPath(): Promise<string | null> {
-  if (mocPathCache !== undefined) {
-    return mocPathCache;
-  }
-
-  try {
-    // Try dfx cache first
-    const cacheDir = (await execAsync('dfx cache show')).stdout.trim();
-    const mocPath = join(cacheDir, 'moc');
-    
-    if (existsSync(mocPath)) {
-      logger.debug(`Found moc at: ${mocPath}`);
-      mocPathCache = mocPath;
-      return mocPath;
-    }
-  } catch {
-    // dfx not found
-  }
-
-  try {
-    // Try PATH
-    await execAsync('which moc');
-    logger.debug('Found moc in PATH');
-    mocPathCache = 'moc';
-    return 'moc';
-  } catch {
-    // Not in PATH
-  }
-
-  logger.warn('moc compiler not found');
-  mocPathCache = null;
-  return null;
+export interface CompileResult extends ValidationResult {
+  toolchain?: { mode: 'project' | 'snippet'; moc?: string; core?: string; directory?: string };
 }
 
 /**
- * Find core package path for imports
+ * Parse moc diagnostics: `file:line.col-line.col: severity [CODE], message`
+ * followed by indented continuation lines.
  */
-async function findBasePath(): Promise<string | null> {
-  if (basePathCache !== undefined) {
-    return basePathCache;
-  }
-
-  try {
-    const cacheDir = (await execAsync('dfx cache show')).stdout.trim();
-    // Try core first (new standard library)
-    const corePath = join(cacheDir, 'core');
-
-    if (existsSync(corePath)) {
-      basePathCache = corePath;
-      return corePath;
-    }
-
-    // Fall back to base for backward compatibility
-    const basePath = join(cacheDir, 'base');
-    if (existsSync(basePath)) {
-      basePathCache = basePath;
-      return basePath;
-    }
-  } catch {
-    // Not found
-  }
-
-  basePathCache = null;
-  return null;
-}
-
-/**
- * Parse error location from format: file.mo:line.col-line.col
- */
-function parseErrorLocation(locationStr: string) {
-  const match = locationStr.match(/([^:]+):(\d+)\.(\d+)-(\d+)\.(\d+)/);
-  if (!match) return null;
-
-  const [_, file, startLine, startCol, endLine, endCol] = match;
-  return {
-    file,
-    startLine: parseInt(startLine),
-    startCol: parseInt(startCol),
-    endLine: parseInt(endLine),
-    endCol: parseInt(endCol),
-  };
-}
-
-/**
- * Parse error start line
- * Format: file.mo:line.col-line.col: severity [CODE], message
- * Severity can be "type error", "syntax error", "import error", "warning", "info"
- */
-function parseErrorStart(line: string): Partial<ValidationIssue> | null {
-  const match = line.match(/^(.+?):\s+([a-z\s]+)\s+\[([^\]]+)\],\s+(.+)$/);
-
-  if (!match) return null;
-
-  const [_, locationStr, rawSeverity, code, message] = match;
-  const location = parseErrorLocation(locationStr);
-
-  if (!location) return null;
-
-  // Normalize severity (type error, syntax error -> error; warning -> warning; info -> info)
-  let severity: 'error' | 'warning' | 'info' = 'error';
-  const severityLower = rawSeverity.trim().toLowerCase();
-  if (severityLower.includes('warning')) {
-    severity = 'warning';
-  } else if (severityLower.includes('info')) {
-    severity = 'info';
-  }
-
-  return {
-    severity,
-    code,
-    message: message.trim(),
-    line: location.startLine,
-    column: location.startCol,
-  };
-}
-
-/**
- * Get documentation URL for error code
- */
-function getMotokoDocUrl(code?: string): string | undefined {
-  if (!code) return undefined;
-  
-  const errorDocs: Record<string, string> = {
-    'M0096': 'https://internetcomputer.org/docs/current/motoko/main/base/Error',
-    'M0057': 'https://internetcomputer.org/docs/current/motoko/main/about-this-guide',
-    'M0001': 'https://internetcomputer.org/docs/current/motoko/main/language-manual',
-    'M0010': 'https://internetcomputer.org/docs/current/motoko/main/package-management',
-  };
-
-  return errorDocs[code] || 'https://internetcomputer.org/docs/current/motoko/main/errors';
-}
-
-/**
- * Finalize error by adding doc URL
- */
-function finalizeError(partial: Partial<ValidationIssue>): ValidationIssue {
-  return {
-    severity: partial.severity || 'error',
-    message: partial.message || 'Unknown error',
-    code: partial.code,
-    line: partial.line,
-    column: partial.column,
-    docUrl: getMotokoDocUrl(partial.code),
-  };
-}
-
-/**
- * Generate a valid placeholder principal based on index
- * Format: simple alphanumeric with dashes that satisfies principal format
- */
-function generatePlaceholderPrincipal(index: number): string {
-  // Use the management canister format as a template: aaaaa-aa
-  // Create variations by using different letters for each canister
-  // This creates unique but valid principals for validation
-  const base32Chars = 'abcdefghijklmnopqrstuvwxyz234567';
-  const idx = index % base32Chars.length;
-  const char = base32Chars[idx];
-
-  // Generate a simple valid principal format: <char><char><char><char><char>-aa
-  return `${char}${char}${char}${char}${char}-aa`;
-}
-
-/**
- * Parse moc compiler errors
- * Handles multi-line errors via state machine
- */
-export function parseMocErrors(stderr: string): ValidationIssue[] {
-  const lines = stderr.split('\n');
-  const errors: ValidationIssue[] = [];
-  let currentError: Partial<ValidationIssue> | null = null;
-
-  for (const line of lines) {
-    // Skip empty lines when not in error
-    if (!currentError && line.trim() === '') {
+export function parseMocErrors(output: string): ValidationIssue[] {
+  const issues: ValidationIssue[] = [];
+  let current: ValidationIssue | null = null;
+  for (const line of output.split('\n')) {
+    const start = line.match(/^(.+?):(\d+)\.(\d+)-\d+\.\d+:\s+([a-z ]+?)\s+\[([A-Z0-9]+)\],\s+(.*)$/);
+    if (start) {
+      if (current) issues.push(current);
+      const raw = start[4].toLowerCase();
+      current = {
+        severity: raw.includes('warning') ? 'warning' : raw.includes('info') ? 'info' : 'error',
+        code: start[5],
+        line: Number(start[2]),
+        column: Number(start[3]),
+        message: start[6].trim(),
+        file: start[1],
+      } as ValidationIssue;
       continue;
     }
-
-    // Check if this is start of new error
-    const errorStart = parseErrorStart(line);
-    
-    if (errorStart) {
-      // Save previous error if exists
-      if (currentError && currentError.message) {
-        errors.push(finalizeError(currentError));
-      }
-      
-      // Start new error
-      currentError = errorStart;
+    if (current && /^\s{2,}\S/.test(line)) {
+      current.message += `\n${line.trim()}`;
+      continue;
     }
-    // Check if this is a continuation line (indented)
-    else if (currentError && line.startsWith('  ')) {
-      // Append to current error message
-      currentError.message = (currentError.message || '') + '\n' + line.trim();
-    }
-    // Blank line or unrecognized - finalize current error
-    else if (currentError) {
-      errors.push(finalizeError(currentError));
-      currentError = null;
+    if (current) {
+      issues.push(current);
+      current = null;
     }
   }
-
-  // Don't forget last error
-  if (currentError && currentError.message) {
-    errors.push(finalizeError(currentError));
-  }
-
-  return errors;
+  if (current) issues.push(current);
+  return issues;
 }
 
-/**
- * Compile Motoko code using moc
- */
-export async function compileMotokoCode(
-  code: string,
-  context?: CompilationContext
-): Promise<ValidationResult> {
-  // Check cache (content-based with SHA-256)
-  const cacheKey = generateCacheKey('motoko:v1', code, {
-    actorAliases: context?.actorAliases || [],
-  });
-  const cached = validationCache.get(cacheKey);
-  if (cached) {
-    logger.debug('Using cached compilation result');
-    return cached;
-  }
-
-  // Find moc
-  const mocPath = await findMocPath();
-  if (!mocPath) {
-    return {
-      valid: false,
-      issues: [{
+function mopsMissing(): CompileResult {
+  return {
+    valid: false,
+    issues: [
+      {
         severity: 'error',
-        message: 'moc compiler not found. Motoko validation requires dfx.',
-        suggestion: 'Install dfx: sh -ci "$(curl -fsSL https://internetcomputer.org/install.sh)"',
-        docUrl: 'https://internetcomputer.org/docs/current/developer-docs/setup/install/',
-      }],
-    };
+        message: 'mops is not installed. Motoko checks run through the project toolchain.',
+        suggestedFix: 'npm install -g ic-mops',
+        references: [REFS.mopsCli],
+      },
+    ],
+  };
+}
+
+async function mopsAvailable(): Promise<boolean> {
+  const result = await runCommand({ program: 'mops', args: ['--version'], timeoutMs: 20_000 });
+  return result.ok;
+}
+
+let snippetVersions: { moc: string; core: string } | null = null;
+
+async function resolveLatest(): Promise<{ moc: string; core: string }> {
+  if (snippetVersions) return snippetVersions;
+  const [moc, core] = await Promise.all([
+    runCommand({ program: 'mops', args: ['toolchain', 'info', 'moc'], timeoutMs: 30_000 }),
+    runCommand({ program: 'mops', args: ['info', 'core'], timeoutMs: 30_000 }),
+  ]);
+  const mocVersion = moc.stdout.match(/latest:\s*(\d+\.\d+\.\d+)/)?.[1];
+  const coreVersion = core.stdout.match(/core@(\d+\.\d+\.\d+)/)?.[1];
+  if (!mocVersion || !coreVersion) {
+    throw new Error(
+      `Could not resolve the latest moc and mo:core versions through mops: ${(moc.stderr || core.stderr || '').trim().slice(0, 300)}`
+    );
   }
+  snippetVersions = { moc: mocVersion, core: coreVersion };
+  return snippetVersions;
+}
 
-  // Write code to temp file
-  const tempFile = join(
-    tmpdir(),
-    `motoko-${Date.now()}-${Math.random().toString(36).substring(7)}.mo`
-  );
+function snippetMopsToml(moc: string, core: string): string {
+  const major = Number(moc.split('.')[0]);
+  const args = major >= 2 ? '["-W", "M0223,M0236,M0237"]' : '["--default-persistent-actors", "-W", "M0223,M0236,M0237"]';
+  return [
+    '[toolchain]',
+    `moc = "${moc}"`,
+    '',
+    '[dependencies]',
+    `core = "${core}"`,
+    '',
+    '[moc]',
+    `args = ${args}`,
+    '',
+    '[canisters.snippet]',
+    'main = "main.mo"',
+    '',
+  ].join('\n');
+}
 
-  // Create temp directory for actor IDL files if needed
-  let idlDir: string | null = null;
+function compileOutcome(output: string, exitOk: boolean): ValidationResult {
+  const issues = parseMocErrors(output);
+  if (!exitOk && !issues.some(i => i.severity === 'error')) {
+    const tail = output.trim().split('\n').slice(-6).join('\n');
+    issues.push({ severity: 'error', message: `mops check failed: ${tail || 'no output'}` });
+  }
+  return { valid: exitOk && !issues.some(i => i.severity === 'error'), issues };
+}
 
+async function checkSnippet(code: string, mocVersion?: string): Promise<CompileResult> {
+  let versions: { moc: string; core: string };
   try {
-    await writeFile(tempFile, code, 'utf-8');
-
-    // Build command with package flag for imports
-    const basePath = await findBasePath();
-    const packageFlag = basePath ? `--package base ${basePath}` : '';
-
-    // Build actor alias/IDL flags for canister imports
-    // moc expects: --actor-alias <name> <principal> --actor-idl <dir>
-    // where <dir>/<principal>.did contains the Candid interface
-    const actorAliasFlags: string[] = [];
-    if (context?.actorAliases && context.actorAliases.length > 0) {
-      logger.debug(`Setting up actor imports for ${context.actorAliases.length} canisters`);
-
-      // Create temp IDL directory
-      idlDir = join(tmpdir(), `motoko-idl-${Date.now()}-${Math.random().toString(36).substring(7)}`);
-      await mkdir(idlDir, { recursive: true });
-      logger.debug(`Created temp IDL directory: ${idlDir}`);
-
-      for (let i = 0; i < context.actorAliases.length; i++) {
-        const alias = context.actorAliases[i];
-
-        // Resolve path relative to project if needed
-        const candidPath = context.projectPath && !alias.candidPath.startsWith('/')
-          ? join(context.projectPath, alias.candidPath)
-          : alias.candidPath;
-
-        logger.debug(`Processing actor: ${alias.name} from ${alias.candidPath}`);
-
-        if (existsSync(candidPath)) {
-          // Generate a unique valid placeholder principal for each canister
-          const placeholderPrincipal = generatePlaceholderPrincipal(i);
-          const idlFileName = `${placeholderPrincipal}.did`;
-          const idlFilePath = join(idlDir, idlFileName);
-
-          // Copy Candid file to IDL directory
-          await copyFile(candidPath, idlFilePath);
-          logger.debug(`Copied ${candidPath} -> ${idlFilePath}`);
-
-          // Add actor alias flag
-          actorAliasFlags.push(`--actor-alias ${alias.name} ${placeholderPrincipal}`);
-          logger.debug(`✓ Added actor alias: ${alias.name} -> ${placeholderPrincipal}`);
-        } else {
-          logger.warn(`✗ Candid file not found for actor ${alias.name}: ${candidPath}`);
-        }
-      }
-    }
-
-    const actorAliasStr = actorAliasFlags.join(' ');
-    const actorIdlFlag = idlDir ? `--actor-idl ${idlDir}` : '';
-    const command = `${mocPath} --check ${packageFlag} ${actorIdlFlag} ${actorAliasStr} ${tempFile}`.trim();
-
-    logger.debug(`=== MOC COMMAND ===`);
-    logger.debug(`  moc path: ${mocPath}`);
-    logger.debug(`  package flag: ${packageFlag}`);
-    logger.debug(`  IDL directory: ${idlDir || 'none'}`);
-    logger.debug(`  actor aliases: ${actorAliasStr || 'none'}`);
-    logger.debug(`  temp file: ${tempFile}`);
-    logger.debug(`  full command: ${command}`);
-    logger.debug(`==================`);
-
-    // Execute compilation
-    try {
-      await execAsync(command);
-
-      // Success!
-      const result: ValidationResult = {
-        valid: true,
-        issues: [],
-      };
-
-      validationCache.set(cacheKey, result);
-      return result;
-
-    } catch (error: any) {
-      // Compilation failed - parse errors
-      const stderr = error.stderr || '';
-      const stdout = error.stdout || '';
-      const exitCode = error.code;
-
-      logger.debug(`moc failed with exit code: ${exitCode}`);
-      logger.debug(`moc stdout: ${stdout}`);
-      logger.debug(`moc stderr: ${stderr}`);
-
-      const issues = parseMocErrors(stderr);
-      logger.debug(`Parsed ${issues.length} issues from stderr`);
-
-      // If no issues parsed but command failed, it's likely a command syntax error
-      if (issues.length === 0 && stderr) {
-        logger.warn(`moc failed but no issues parsed. Raw stderr: ${stderr}`);
-        issues.push({
-          severity: 'error',
-          message: `Compilation failed: ${stderr}`,
-        });
-      }
-
-      const result: ValidationResult = {
-        valid: false,
-        issues,
-      };
-
-      // Cache for 1 minute (user might be iterating)
-      validationCache.set(cacheKey, result, 60 * 1000);
-      return result;
-    }
-
+    const latest = await resolveLatest();
+    versions = { moc: mocVersion || latest.moc, core: latest.core };
   } catch (error: any) {
-    logger.error('Motoko compilation error:', error);
+    return { valid: false, issues: [{ severity: 'error', message: error.message, references: [REFS.mopsCli] }] };
+  }
 
-    return {
-      valid: false,
-      issues: [{
-        severity: 'error',
-        message: `Compilation failed: ${error.message}`,
-      }],
-    };
-
-  } finally {
-    // Cleanup temp files
-    try {
-      await unlink(tempFile);
-    } catch {
-      // Ignore cleanup errors
-    }
-
-    // Cleanup temp IDL directory
-    if (idlDir) {
-      try {
-        await rm(idlDir, { recursive: true, force: true });
-        logger.debug(`Cleaned up IDL directory: ${idlDir}`);
-      } catch {
-        // Ignore cleanup errors
+  const dir = await mkdtemp(join(tmpdir(), 'ic-mcp-motoko-'));
+  try {
+    await writeFile(join(dir, 'mops.toml'), snippetMopsToml(versions.moc, versions.core), 'utf-8');
+    await writeFile(join(dir, 'main.mo'), code, 'utf-8');
+    const result = await runCommand({
+      program: 'mops',
+      args: ['check', 'snippet', '--no-lint'],
+      cwd: dir,
+      timeoutMs: 180_000,
+    });
+    const outcome = compileOutcome(`${result.stdout}\n${result.stderr}`, result.ok);
+    for (const issue of outcome.issues) {
+      delete (issue as any).file;
+      if (issue.code === 'M0010' && /package "base"/.test(issue.message)) {
+        issue.suggestedFix = 'mo:base is deprecated; import the module from mo:core.';
+        issue.references = [REFS.writingMotoko];
       }
     }
+    return { ...outcome, toolchain: { mode: 'snippet', moc: versions.moc, core: versions.core } };
+  } finally {
+    await rm(dir, { recursive: true, force: true });
   }
 }
 
+async function readMocPin(dir: string): Promise<string | undefined> {
+  const text = await readFile(join(dir, 'mops.toml'), 'utf-8').catch(() => '');
+  return text.match(/^\s*moc\s*=\s*"([^"]+)"/m)?.[1];
+}
+
 /**
- * Check if moc is available
+ * Locate the directory whose mops.toml covers the project (or one canister).
  */
+export async function findMopsProject(projectPath: string, canister?: string): Promise<string | null> {
+  const declares = async (dir: string) => {
+    const text = await readFile(join(dir, 'mops.toml'), 'utf-8').catch(() => null);
+    if (text === null) return false;
+    return canister ? new RegExp(`^\\s*\\[canisters\\.\\"?${canister.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\"?\\]`, 'm').test(text) : true;
+  };
+  if (await declares(projectPath)) return projectPath;
+  if (canister && (await declares(join(projectPath, canister)))) return join(projectPath, canister);
+  if (!existsSync(projectPath)) return null;
+  for (const entry of await readdir(projectPath, { withFileTypes: true })) {
+    if (entry.isDirectory() && !entry.name.startsWith('.') && entry.name !== 'node_modules') {
+      const dir = join(projectPath, entry.name);
+      if (await declares(dir)) return dir;
+    }
+  }
+  return null;
+}
+
+async function checkProject(projectPath: string, canister?: string): Promise<CompileResult> {
+  const dir = await findMopsProject(projectPath, canister);
+  if (!dir) {
+    return {
+      valid: false,
+      issues: [
+        {
+          severity: 'error',
+          message: canister
+            ? `No mops.toml declaring [canisters.${canister}] under ${projectPath}.`
+            : `No mops.toml under ${projectPath}.`,
+          suggestedFix: 'Motoko canisters built with the @dfinity/motoko recipe declare [canisters.<name>] in mops.toml.',
+          references: [REFS.mopsCli, REFS.icpCli],
+        },
+      ],
+    };
+  }
+  const result = await runCommand({
+    program: 'mops',
+    args: ['check', ...(canister ? [canister] : [])],
+    cwd: dir,
+    timeoutMs: 300_000,
+  });
+  const outcome = compileOutcome(`${result.stdout}\n${result.stderr}`, result.ok);
+  return { ...outcome, toolchain: { mode: 'project', moc: await readMocPin(dir), directory: dir } };
+}
+
+/**
+ * Compile-check Motoko. With `projectPath`, checks the project on disk with its
+ * own toolchain and `code` is not compiled; otherwise checks `code` as a snippet.
+ */
+export async function compileMotokoCode(code: string, context: CompileContext = {}): Promise<CompileResult> {
+  if (!(await mopsAvailable())) {
+    return mopsMissing();
+  }
+  try {
+    return context.projectPath
+      ? await checkProject(context.projectPath, context.canister)
+      : await checkSnippet(code, context.mocVersion);
+  } catch (error: any) {
+    logger.error('Motoko check failed to run:', error);
+    return { valid: false, issues: [{ severity: 'error', message: `Motoko check failed to run: ${error.message}` }] };
+  }
+}
+
 export async function checkMocAvailable(): Promise<boolean> {
-  const mocPath = await findMocPath();
-  return mocPath !== null;
+  return mopsAvailable();
 }

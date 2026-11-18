@@ -77,9 +77,9 @@ export const docsCache = new Cache<any>();
 export const examplesCache = new Cache<any>();
 export const validationCache = new Cache<any>();
 
-// Run cleanup every 5 minutes
+// Run cleanup every 5 minutes without keeping the process alive
 setInterval(() => {
   docsCache.cleanup();
   examplesCache.cleanup();
   validationCache.cleanup();
-}, 5 * 60 * 1000);
+}, 5 * 60 * 1000).unref();

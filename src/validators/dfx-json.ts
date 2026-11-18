@@ -50,7 +50,7 @@ function validateStructure(config: DfxConfig): ValidationIssue[] {
       severity: 'warning',
       message: 'Missing version field',
       suggestion: 'Add "version": 1 to specify dfx.json format version',
-      docUrl: 'https://internetcomputer.org/docs/current/developer-docs/getting-started/install/',
+      docUrl: 'https://cli.internetcomputer.org/',
     });
   }
 
@@ -60,7 +60,7 @@ function validateStructure(config: DfxConfig): ValidationIssue[] {
       severity: 'error',
       message: 'Missing or empty canisters field',
       suggestion: 'dfx.json must define at least one canister',
-      docUrl: 'https://internetcomputer.org/docs/current/references/cli-reference/dfx-json-reference',
+      docUrl: 'https://cli.internetcomputer.org/1.8/migration/from-dfx/',
     });
   }
 
@@ -80,7 +80,7 @@ function validateCanisters(canisters: Record<string, CanisterConfig>): Validatio
         severity: 'error',
         message: `Canister "${name}" missing type field`,
         suggestion: 'Specify type: "motoko", "rust", "custom", or "assets"',
-        docUrl: 'https://internetcomputer.org/docs/current/references/cli-reference/dfx-json-reference',
+        docUrl: 'https://cli.internetcomputer.org/1.8/migration/from-dfx/',
       });
       continue;
     }

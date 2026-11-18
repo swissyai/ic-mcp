@@ -29,17 +29,22 @@ npm test
 Run the test suite before submitting:
 
 ```bash
-npm test                 # Run all tests
+npm test                 # Run all tests (fixtures, no network or toolchain)
 npm run test:unit        # Unit tests only
 npm run test:integration # Integration tests only
+IC_MCP_LIVE=1 npm test   # Also check the live official sites and links
 ```
 
 ## Project Structure
 
-- `src/tools/` - MCP tool implementations (query, action, execute, help)
-- `src/data/` - Module definitions and ICP examples
-- `src/utils/` - Validation, compilation, TOON encoding utilities
-- `tests/` - Unit and integration tests
+- `src/tools/` - MCP tools (query, action, execute, help) and the operations behind action
+- `src/knowledge/` - Official skills and docs indexes, section splitting
+- `src/fetchers/` - Guarded fetching and caching of official documents
+- `src/executors/` - Process execution with argument arrays
+- `src/converters/` - dfx.json to icp.yaml conversion
+- `src/validators/` - Candid, Motoko (mops), Rust and cloud engine checks
+- `src/data/` - Reference links, bundled module list, example index
+- `tests/` - Unit, integration and live tests
 
 ## Pull Request Guidelines
 

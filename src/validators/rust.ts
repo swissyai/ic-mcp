@@ -60,7 +60,7 @@ function checkMethodAttributes(code: string): ValidationIssue[] {
       explanation: 'Rust functions need #[query] or #[update] macros to be exposed as canister methods. #[query] methods are read-only, execute faster, and cost less cycles. #[update] methods can modify state but go through consensus. Without these attributes, your functions are not callable from the outside.',
       suggestedFix: `#[query]\nfn read_data() -> String {\n    // Fast, read-only\n}\n\n#[update]\nfn write_data(value: String) {\n    // State-changing, goes through consensus\n}`,
       references: [
-        'https://internetcomputer.org/docs/current/developer-docs/backend/rust/intercanister',
+        'https://docs.internetcomputer.org/guides/canister-calls/inter-canister-calls/',
         'https://docs.rs/ic-cdk-macros/latest/ic_cdk_macros/attr.query.html',
       ],
       example: `use ic_cdk_macros::{query, update};\n\n#[query]\nfn get_count() -> u64 {\n    COUNTER.with(|c| *c.borrow())\n}\n\n#[update]\nfn increment() {\n    COUNTER.with(|c| *c.borrow_mut() += 1);\n}`,
@@ -92,13 +92,13 @@ function checkStateManagement(code: string): ValidationIssue[] {
       explanation: `ICP's Wasm runtime is single-threaded, but static mut in Rust is inherently unsafe and requires unsafe blocks for all access. It's also incompatible with the actor model where state should be managed through thread_local! with RefCell. Using static mut will cause compilation errors or undefined behavior in canisters.`,
       suggestedFix: `thread_local! {\n    static STATE: RefCell<State> = RefCell::new(State::default());\n}\n\n#[update]\nfn modify_state() {\n    STATE.with(|s| s.borrow_mut().value += 1);\n}`,
       references: [
-        'https://internetcomputer.org/docs/current/developer-docs/backend/rust/samples/state',
+        'https://skills.internetcomputer.org/skills/stable-memory/',
         'https://doc.rust-lang.org/std/macro.thread_local.html',
       ],
       example: `use std::cell::RefCell;\n\nthread_local! {\n    static COUNTER: RefCell<u64> = RefCell::new(0);\n}\n\n#[query]\nfn get() -> u64 {\n    COUNTER.with(|c| *c.borrow())\n}\n\n#[update]\nfn increment() {\n    COUNTER.with(|c| *c.borrow_mut() += 1);\n}`,
       // Deprecated
       suggestion: 'Use thread_local! with RefCell or Cell for shared mutable state',
-      docUrl: 'https://internetcomputer.org/docs/current/developer-docs/backend/rust/samples/state',
+      docUrl: 'https://skills.internetcomputer.org/skills/stable-memory/',
     });
   }
 
@@ -109,7 +109,7 @@ function checkStateManagement(code: string): ValidationIssue[] {
       severity: 'info',
       message: 'Update methods typically need state management',
       suggestion: 'Consider using thread_local! with RefCell for mutable state',
-      docUrl: 'https://internetcomputer.org/docs/current/developer-docs/backend/rust/samples/state',
+      docUrl: 'https://skills.internetcomputer.org/skills/stable-memory/',
     });
   }
 
@@ -133,7 +133,7 @@ function checkCandidExport(code: string): ValidationIssue[] {
       suggestedFix: `// Add at the end of your file\nic_cdk::export_candid!();`,
       references: [
         'https://docs.rs/ic-cdk/latest/ic_cdk/macro.export_candid.html',
-        'https://internetcomputer.org/docs/current/developer-docs/backend/candid/candid-concepts',
+        'https://docs.internetcomputer.org/guides/canister-calls/candid/',
       ],
       example: `use ic_cdk_macros::{query, update};\n\n#[query]\nfn greet(name: String) -> String {\n    format!("Hello, {}!", name)\n}\n\n#[update]\nfn set_name(name: String) {\n    // ...\n}\n\n// Generates .did file automatically\nic_cdk::export_candid!();`,
       // Deprecated
@@ -155,13 +155,21 @@ function checkUpgradeHooks(code: string): ValidationIssue[] {
   const hasPostUpgrade = code.includes('#[post_upgrade]');
   const hasThreadLocal = code.includes('thread_local!');
 
-  // If there's state but no upgrade hooks
-  if (hasThreadLocal && (!hasPreUpgrade || !hasPostUpgrade)) {
+  const usesStableStructures = /ic_stable_structures|StableBTreeMap|StableCell|StableVec|StableLog/.test(code);
+
+  if (hasThreadLocal && !usesStableStructures) {
     issues.push({
       severity: 'info',
-      message: 'State management without upgrade hooks',
-      suggestion: 'Implement #[pre_upgrade] and #[post_upgrade] to preserve state during canister upgrades',
-      docUrl: 'https://internetcomputer.org/docs/current/developer-docs/backend/rust/samples/upgrades',
+      message: 'Heap state in thread_local! is wiped on every upgrade',
+      suggestion:
+        'Keep data that must survive upgrades in ic-stable-structures (StableBTreeMap with MemoryManager). Serializing large heap state in #[pre_upgrade] can hit the instruction limit and trap.',
+      docUrl: 'https://skills.internetcomputer.org/skills/stable-memory/',
+    });
+  } else if (hasPreUpgrade && !hasPostUpgrade) {
+    issues.push({
+      severity: 'warning',
+      message: '#[pre_upgrade] without #[post_upgrade]: data saved before an upgrade is never restored',
+      docUrl: 'https://skills.internetcomputer.org/skills/stable-memory/',
     });
   }
 
@@ -175,15 +183,15 @@ function checkSecurityPatterns(code: string): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
 
   // Check for caller() usage in critical operations
-  const hasCallerCheck = code.includes('ic_cdk::api::caller()');
+  const hasCallerCheck = /\b(msg_)?caller\(\)/.test(code);
   const hasUpdateWithoutCaller = code.includes('#[update]') && !hasCallerCheck;
 
   if (hasUpdateWithoutCaller && code.includes('delete') || code.includes('admin')) {
     issues.push({
       severity: 'warning',
       message: 'Critical operations without caller verification',
-      suggestion: 'Use ic_cdk::api::caller() to verify the caller identity for admin/delete operations',
-      docUrl: 'https://internetcomputer.org/docs/current/developer-docs/security/security-best-practices',
+      suggestion: 'Use ic_cdk::api::msg_caller() to verify the caller identity for admin/delete operations',
+      docUrl: 'https://docs.internetcomputer.org/guides/security/overview/',
     });
   }
 
@@ -194,7 +202,7 @@ function checkSecurityPatterns(code: string): ValidationIssue[] {
       severity: 'warning',
       message: `Found ${hasUnwrap.length} unwrap() calls that could panic`,
       suggestion: 'Use expect() with error messages or proper error handling instead of unwrap()',
-      docUrl: 'https://internetcomputer.org/docs/current/developer-docs/security/security-best-practices',
+      docUrl: 'https://docs.internetcomputer.org/guides/security/overview/',
     });
   }
 

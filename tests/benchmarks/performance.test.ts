@@ -3,10 +3,14 @@
  * Measures token efficiency and response times
  */
 
-import { describe, it } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { DataEncoder } from '../../src/core/toon-encoder.js';
 import { MODULES_MINIMAL, expandModule } from '../../src/data/modules-minimal.js';
 import { useCaseData } from '../../src/data/use-cases.js';
+import { queryTool, query, QueryInputSchema } from '../../src/tools/query.js';
+import { actionTool } from '../../src/tools/action.js';
+import { helpTool } from '../../src/tools/help.js';
+import { installFakeWeb } from '../helpers/fake-web.js';
 
 describe('TOON Encoding Performance', () => {
   it('should achieve 50%+ token reduction on module list', () => {
@@ -88,11 +92,6 @@ describe('TOON Encoding Performance', () => {
 
 describe('Tool Description Token Overhead', () => {
   it('should keep total overhead under 10k tokens', () => {
-    // Tool descriptions
-    const { queryTool } = require('../../dist/tools/query.js');
-    const { actionTool } = require('../../dist/tools/action.js');
-    const { helpTool } = require('../../dist/tools/help.js');
-
     const queryDesc = queryTool.description;
     const actionDesc = actionTool.description;
     const helpDesc = helpTool.description;
@@ -136,7 +135,8 @@ describe('Tool Description Token Overhead', () => {
 
 describe('Response Time Performance', () => {
   it('should respond quickly to common operations', async () => {
-    const { query } = await import('../../src/tools/query.js');
+    const web = installFakeWeb();
+    await query(QueryInputSchema.parse({ operation: 'list-all', format: 'json' }));
 
     const operations = [
       { name: 'List all modules', operation: 'list-all' as const },
@@ -149,17 +149,16 @@ describe('Response Time Performance', () => {
 
     for (const { name, operation, modules } of operations) {
       const start = performance.now();
-      await query({ operation, modules, format: 'json' });
+      await query(QueryInputSchema.parse({ operation, modules, format: 'json' }));
       const end = performance.now();
       const duration = (end - start).toFixed(1);
 
       console.log(`  ${name.padEnd(26)} | ${duration.padStart(7)}ms`);
 
-      // List-all should be instant, document may take time for network fetch
-      if (operation === 'list-all') {
-        expect(end - start).toBeLessThan(100);
-      }
+      // Served from cache after the first request
+      expect(end - start).toBeLessThan(100);
     }
+    web.restore();
   });
 });
 
